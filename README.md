@@ -20,7 +20,7 @@ Objects live in a Clicky-style tray under the MacBook notch, not in the paw menu
 
 Build and logic checks cover all 24 clips changing bone transforms, deterministic fetch phases and rewards, fetch cancellation, save compatibility, screen-to-ground mapping, and exact home-projection preservation. Mouse-only `CGEvent` runtime checks exercised notch hover, held-item cancellation, desktop throw/fetch/return, dropped-ball pickup, and food-bowl care in the signed app. Evidence: `docs/screens/notch-tray.png`, `fetch-{throw,run,return}.png`, and `food-bowl-eat.png`. `swift test` remains blocked by the local Xcode/Command Line Tools license state, so the same PetKit assertions ran through throwaway `swiftc` probes.
 
-A final 10-minute signed-app soak with the tray collapsed sampled `0.0%` CPU at 0, 5, and 10 minutes. RSS stayed between 120,928 and 121,072 KiB (118.1–118.2 MiB), below the 120 MiB gate. No permission prompt appeared during the mouse-only runtime session.
+A final 10-minute signed-app soak with the tray collapsed sampled `0.0%` CPU at 0, 5, and 10 minutes. RSS stayed between 120,896 and 120,976 KiB (118.1 MiB), below the 120 MiB gate. No permission prompt appeared during the mouse-only runtime session.
 
 Blender 4.2.23 LTS on Windows successfully imports, authors and exports the rip. Blender 5.2.1 has no Collada import operator; use 4.2 LTS for animation work.
 
