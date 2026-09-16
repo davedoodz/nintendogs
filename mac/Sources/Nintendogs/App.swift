@@ -41,10 +41,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var morningGreetingDay: Date?
     private var fetchSequence: FetchSequence?
     private var fetchPhase: FetchSequence.Phase?
-    private var fetchIsThrowing = false
+    /// A thrown ball is still moving; the flight owns the ball's transform until it rests.
+    private var fetchFlightActive = false
     private var fetchBallAttached = false
+    /// Where the dog stood when the ball was thrown; the carry destination stays near it.
+    private var fetchHome: SIMD2<Double>?
+    /// How far from that spot the cursor may pull the drop, in world units.
+    private static let returnLean: Double = 1.1
+    /// The ball is on the cursor and the dog is watching it (R2-R4).
+    private var isAiming = false
     private var ballExpiresAt: Date?
     private static let ballLifetime: TimeInterval = 5 * 60
+    /// Excited standing loop played while the ball is held. `shiba_anticipate_loop` is the
+    /// authored clip for this; until it lands, the standing look-around loop stands in.
+    private static let anticipationClip = "shiba_look_around_loop"
 
     private func observePresence() {
         let center = NSWorkspace.shared.notificationCenter
@@ -122,7 +132,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 var previous = ProcessInfo.processInfo.systemUptime
                 while !Task.isCancelled {
                     let active = self?.workspaceSleeping == false && self?.panel?.isVisible == true
-                    do { try await Task.sleep(for: .milliseconds(active ? 100 : 250)) } catch { break }
+                    // A bouncing ball and a running chase need real frames; 100 ms reads as a
+                    // slideshow. Everything else keeps the idle-friendly cadence that holds
+                    // CPU at zero.
+                    let busy = self?.isAiming == true
+                        || self?.fetchSequence != nil
+                    let interval = active ? (busy ? 33 : 100) : 250
+                    do { try await Task.sleep(for: .milliseconds(interval)) } catch { break }
                     guard let self else { break }
                     let uptime = ProcessInfo.processInfo.systemUptime
                     let delta = min(0.1, max(0, uptime - previous))
@@ -190,7 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 animations?.play(behavior.state.activity, careRequest: behavior.state.careRequest != nil)
             }
             if fetchSequence != nil {
-                status = fetchIsThrowing ? "Throwing" : "Fetching"
+                status = fetchFlightActive ? "Throwing" : "Fetching"
             } else if let request = behavior.state.careRequest {
                 status = request
             } else if panel?.sceneHost.isWandering == true {
@@ -213,6 +229,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let dt = min(deltaTime, 0.1)
         let host = panel.sceneHost
         presenceTime += dt
+        if isAiming {
+            advanceAiming(by: dt, host: host, animations: animations)
+            return
+        }
         if fetchSequence != nil {
             advanceFetch(by: dt, host: host, animations: animations)
             return
@@ -267,6 +287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// CPU to the plan's 0.0% budget without making fetch, wander, gaze, or reactions choppy.
     private func rendererShouldRun(host: SceneHost, animations: AnimationController) -> Bool {
         fetchSequence != nil
+            || isAiming
             || previewing
             || host.isWandering
             || host.cursorAttention
@@ -297,10 +318,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             heldItems.cancelRect = NotchTrayPanel.notchRect(on: screen)
         }
         heldItems.begin(item)
+        // Only the ball is aimed; a bowl is placed, so the dog has nothing to track.
+        if item == .ball { beginAiming() }
     }
 
     func cancelHold() {
         heldItems.end()
+        if isAiming {
+            endAiming(resumeIdle: true)
+            panel?.leaveArena()
+        }
+    }
+
+    /// Expands to the arena for the whole hold, so the aim marker and the dog's tracking
+    /// work anywhere on the display rather than only inside the home panel (R1).
+    private func beginAiming() {
+        guard let panel, let screen = panel.screen ?? NSScreen.main else { return }
+        if fetchSequence != nil { cancelFetch() }
+        previewing = false
+        panel.sceneHost.stopWander()
+        animations?.endLocomotion()
+        ambient?.setAttention(false)
+        panel.enterArena(on: screen)
+        isAiming = true
+        status = "Aiming"
+    }
+
+    /// Clears the aim state. `resumeIdle` is false when a throw follows immediately, so the
+    /// fetch's own clip is not overwritten by an idle transition on the same tick.
+    private func endAiming(resumeIdle: Bool) {
+        guard isAiming else { return }
+        isAiming = false
+        panel?.sceneHost.setAimTarget(nil)
+        guard resumeIdle, let behavior else { return }
+        animations?.play(behavior.state.activity, careRequest: behavior.state.careRequest != nil, restart: true)
+        refresh()
+    }
+
+    /// Tracks the cursor's ground spot, turns the dog toward it, and keeps the excited loop
+    /// running (R2-R4). Polls `NSEvent.mouseLocation` on this loop rather than taking mouse
+    /// events from the held-item overlay, so the dog keeps watching a parked cursor.
+    private func advanceAiming(by dt: TimeInterval, host: SceneHost, animations: AnimationController) {
+        if let ground = host.groundPoint(forScreenPoint: NSEvent.mouseLocation) {
+            host.setAimTarget(ground)
+        }
+        host.advanceAim(deltaTime: dt)
+        if animations.currentClip != Self.anticipationClip {
+            animations.triggerReaction(Self.anticipationClip, thenReturnToRest: true)
+        }
+        animations.update(deltaTime: dt)
+        host.sceneTime = animations.sceneTime
+        host.setAnimationActive(true)
     }
 
     /// Accepts the held item only on the display that owns the pet panel. Other displays keep
@@ -311,10 +379,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         case .ball:
             panel.enterArena(on: screen)
             guard let ground = panel.sceneHost.groundPoint(forScreenPoint: point) else {
+                endAiming(resumeIdle: true)
                 panel.leaveArena()
                 return
             }
             heldItems.end()
+            endAiming(resumeIdle: false)
             beginFetch(to: ground)
         case .foodBowl, .waterBowl:
             heldItems.end()
@@ -324,45 +394,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
 
+    /// Throws the ball and starts the chase on the same tick (R8): the dog runs at the rest
+    /// point the flight model predicts, and `advanceFetch` corrects that target as the ball
+    /// actually bounces.
     private func beginFetch(to landing: SIMD2<Double>) {
         guard let panel, let animations else { return }
         previewing = false
         ballExpiresAt = nil
-        panel.sceneHost.stopWander()
+        let host = panel.sceneHost
+        host.stopWander()
         animations.endLocomotion()
         ambient?.setAttention(false)
-        let home = panel.sceneHost.petPosition
+        let home = SIMD2(Double(host.petPosition.x), Double(host.petPosition.z))
+        let rest = host.throwBall(to: landing)
         let durations = FetchSequence.ClipDurations(
             pickup: animations.duration(ofClip: "shiba_fetch_pickup") ?? 2.5,
             happy: animations.duration(ofClip: "shiba_happy") ?? 2.5
         )
         let sequence = FetchSequence(
-            home: SIMD2(Double(home.x), Double(home.z)),
-            ball: landing,
+            home: home,
+            heading: Double(host.petFacing),
+            ball: rest,
+            returnTo: host.homeRegionClamp(home),
             clipDurations: durations
         )
         fetchSequence = sequence
+        fetchHome = home
         fetchPhase = nil
         fetchBallAttached = false
-        fetchIsThrowing = true
-        status = "Throwing"
-        panel.sceneHost.throwBall(to: landing)
+        fetchFlightActive = true
+        status = "Fetching"
+        // The held-item overlay is already gone, so dog gestures can cancel from here on.
+        panel.enableArenaInteractions()
+        behavior?.interact(.fetch, at: Date(), duration: sequence.estimatedDuration)
+        refresh()
     }
 
     private func advanceFetch(by dt: TimeInterval, host: SceneHost, animations: AnimationController) {
-        if fetchIsThrowing {
-            if host.advanceBallThrow(by: dt), let sequence = fetchSequence {
-                fetchIsThrowing = false
-                panel?.enableArenaInteractions()
-                behavior?.interact(.fetch, at: Date(), duration: sequence.totalDuration)
-                refresh()
-            }
-            animations.update(deltaTime: dt)
-            host.sceneTime = animations.sceneTime
-            host.setAnimationActive(true)
-            return
-        }
         guard var sequence = fetchSequence else { return }
+        if let flight = host.advanceBallFlight(by: dt) {
+            sequence.updateBall(position: flight.ground, atRest: flight.atRest)
+            if flight.atRest { fetchFlightActive = false }
+        }
+        // Carry the ball back toward the thrower's cursor, but no further from the spot the
+        // dog threw from than `returnLean`: clamping only to the panel's visible region left
+        // the dog parked in a corner facing away, which does not read as bringing it back
+        // to you (R10). The region clamp goes last so it is the one that has the final say
+        // on staying on screen.
+        if let ground = host.groundPoint(forScreenPoint: NSEvent.mouseLocation), let fetchHome {
+            let leaned = SIMD2(
+                min(max(ground.x, fetchHome.x - Self.returnLean), fetchHome.x + Self.returnLean),
+                min(max(ground.y, fetchHome.y - Self.returnLean), fetchHome.y + Self.returnLean)
+            )
+            sequence.updateReturn(to: host.homeRegionClamp(leaned))
+        }
         sequence.advance(by: dt)
         fetchSequence = sequence
         host.setPetPose(position: sequence.position, heading: sequence.heading)
@@ -370,7 +455,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             host.attachBall(toMouth: sequence.ballAttached)
             fetchBallAttached = sequence.ballAttached
         }
-        if !sequence.ballAttached {
+        // While the throw is still in the air the flight owns the ball's transform.
+        if !sequence.ballAttached, !fetchFlightActive {
             host.placeBall(at: sequence.ballPosition)
         }
         if fetchPhase != sequence.phase {
@@ -383,7 +469,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         animations.update(deltaTime: dt)
         host.sceneTime = animations.sceneTime
         host.updateAttachedBallTransform()
-        host.setAnimationActive(animations.isAnimating)
+        host.setAnimationActive(true)
         if sequence.phase == .done {
             finishFetch(sequence)
         }
@@ -397,12 +483,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         panel.leaveArena()
         fetchSequence = nil
         fetchPhase = nil
-        fetchIsThrowing = false
+        fetchFlightActive = false
+        fetchHome = nil
         fetchBallAttached = false
         ballExpiresAt = Date().addingTimeInterval(Self.ballLifetime)
         animations?.play(.idle, restart: true)
         refresh()
         save()
+        // The full-screen arena render target and the trip's transient allocations are done
+        // with; hand the pages back so idle RSS returns to its pre-fetch level.
+        DispatchQueue.main.async { _ = malloc_zone_pressure_relief(nil, 0) }
     }
 
     private func cancelFetch() {
@@ -413,7 +503,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         panel.leaveArena()
         fetchSequence = nil
         fetchPhase = nil
-        fetchIsThrowing = false
+        fetchFlightActive = false
+        fetchHome = nil
         fetchBallAttached = false
         ballExpiresAt = Date().addingTimeInterval(Self.ballLifetime)
         behavior?.interact(.idle, at: Date())

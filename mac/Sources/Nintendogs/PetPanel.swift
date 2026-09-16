@@ -65,16 +65,23 @@ final class PetPanel: NSPanel {
     }
 
     /// Reverses `enterArena` in the opposite order.
+    ///
+    /// Re-arming the autosave name has to come *before* the frame is restored: AppKit applies
+    /// the stored frame the moment a name is set, which otherwise teleports the panel to
+    /// whatever was last saved — including an off-screen frame from a display that is no
+    /// longer attached. Setting the name first, then the home frame, then saving it, leaves
+    /// the stored frame equal to the home frame the arena was entered from.
     func leaveArena() {
         guard let home = arenaHomeFrame else { return }
         arenaHomeFrame = nil
-        setFrame(home, display: true)
-        sceneHost.restoreProjection()
-        ignoresMouseEvents = false
         contentAspectRatio = NSSize(width: 3, height: 2)
         if let arenaHomeMaxSize { maxSize = arenaHomeMaxSize }
         arenaHomeMaxSize = nil
         setFrameAutosaveName("PetPanel")
+        setFrame(home, display: true)
+        saveFrame(usingName: "PetPanel")
+        sceneHost.restoreProjection()
+        ignoresMouseEvents = false
     }
 
     override var canBecomeKey: Bool { false }

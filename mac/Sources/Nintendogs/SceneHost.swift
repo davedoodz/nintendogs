@@ -87,7 +87,20 @@ final class SceneHost: SCNView {
     private let ballShadow = SCNNode()
     private weak var mouthNode: SCNNode?
     private(set) var ballAttached = false
-    private var ballThrow: (start: SCNVector3, landing: SCNVector3, elapsed: TimeInterval)?
+    private var ballFlight: BallFlight?
+    private var lastBounceCount = 0
+    /// How long an impact squash lasts. Longer than one loop tick, so the deformation is on
+    /// screen for at least one rendered frame.
+    private static let ballSquashDuration: TimeInterval = 0.18
+    /// Seconds left of the post-impact squash; drives `ballRoot.scale` only while positive.
+    private var ballSquash: TimeInterval = 0
+    /// Ground ring showing where a held ball would land, and the spot the dog aims at while
+    /// the ball is on the cursor (R2, R4).
+    private let aimMarker = SCNNode()
+    private var aimTarget: SIMD2<Double>?
+    /// The home frame recorded by `applyHomeProjection(home:arena:)`, so the region visible
+    /// in the home panel stays computable while the view covers the whole screen (KTD5).
+    private var arenaHomeFrame: NSRect?
     var hasBall: Bool { ballRoot.parent != nil }
     var ballGroundPosition: SIMD2<Double>? {
         guard hasBall else { return nil }
@@ -309,9 +322,31 @@ final class SceneHost: SCNView {
         ballShadow.geometry?.materials = [shadow]
         ballShadow.eulerAngles.x = -.pi / 2
         ballShadow.position.y = 0.003
+        // Drawn before the ball: the plane does not write depth, so without an explicit
+        // order it can paint over the resting ball's lower half and flatten its silhouette.
+        ballShadow.renderingOrder = -1
         ballShadow.isHidden = true
+        configureAimMarker()
+        scene.rootNode.addChildNode(aimMarker)
         scene.rootNode.addChildNode(ballRoot)
         scene.rootNode.addChildNode(ballShadow)
+    }
+
+    /// A flat ring, unlit and depth-transparent so it reads as a mark on the ground rather
+    /// than an object standing on it.
+    private func configureAimMarker() {
+        let ring = SCNTorus(ringRadius: 0.2, pipeRadius: 0.02)
+        ring.ringSegmentCount = 32
+        ring.pipeSegmentCount = 6
+        let material = SCNMaterial()
+        material.diffuse.contents = NSColor(calibratedRed: 0.72, green: 0.84, blue: 0.16, alpha: 0.9)
+        material.lightingModel = .constant
+        material.writesToDepthBuffer = false
+        ring.firstMaterial = material
+        aimMarker.geometry = ring
+        aimMarker.position.y = 0.005
+        aimMarker.opacity = 0.95
+        aimMarker.isHidden = true
     }
 
     func setPetPose(position: SIMD2<Double>, heading: Double) {
@@ -324,7 +359,7 @@ final class SceneHost: SCNView {
 
     func placeBall(at position: SIMD2<Double>) {
         ballRoot.removeAllActions()
-        ballThrow = nil
+        ballFlight = nil
         if ballRoot.parent !== scene?.rootNode {
             ballRoot.removeFromParentNode()
             scene?.rootNode.addChildNode(ballRoot)
@@ -334,52 +369,100 @@ final class SceneHost: SCNView {
         ballRoot.position = SCNVector3(position.x, 0.08, position.y)
         ballRoot.isHidden = false
         ballShadow.position = SCNVector3(position.x, ballShadow.position.y, position.y)
+        ballShadow.scale = SCNVector3(1, 1, 1)
+        ballShadow.opacity = 1
         ballShadow.isHidden = false
         setNeedsDisplay(bounds)
     }
 
-    /// Starts a 0.75-second parabola. `advanceBallThrow(by:)` owns timing on the app's
-    /// main-actor loop, avoiding SceneKit action callbacks racing actor-isolated scene state.
-    func throwBall(to landing: SIMD2<Double>) {
+    /// Launches the ball so its first impact is `landing`, then lets it bounce and roll to
+    /// rest (R6). Returns the spot it will come to rest on, which is what the dog chases from
+    /// the moment of the throw (R8).
+    @discardableResult
+    func throwBall(to landing: SIMD2<Double>) -> SIMD2<Double> {
         attachBall(toMouth: false)
-        let start = SCNVector3(
-            petAnchor.position.x,
-            petAnchor.position.y + 0.9,
-            petAnchor.position.z + 1.6
+        let launch = SIMD3<Double>(
+            Double(petAnchor.position.x),
+            Double(petAnchor.position.y) + 0.9,
+            Double(petAnchor.position.z) + 1.6
         )
-        let destination = SCNVector3(landing.x, 0.08, landing.y)
+        let flight = BallFlight(
+            launch: launch,
+            aim: landing,
+            bounds: BallFlight.Bounds(
+                xLimit: Self.arenaXLimit,
+                zNear: Self.arenaZNear,
+                zFar: Self.arenaZFar
+            )
+        )
         ballRoot.removeAllActions()
         if ballRoot.parent !== scene?.rootNode {
             ballRoot.removeFromParentNode()
             scene?.rootNode.addChildNode(ballRoot)
         }
         ballRoot.scale = SCNVector3(1, 1, 1)
-        ballRoot.position = start
+        ballRoot.eulerAngles = SCNVector3(0, 0, 0)
         ballRoot.isHidden = false
         ballShadow.isHidden = false
-        ballThrow = (start, destination, 0)
+        lastBounceCount = 0
+        ballSquash = 0
+        ballFlight = flight
+        applyFlight(flight)
+        return flight.predictedRest
     }
 
-    /// Advances the in-flight ball; returns `true` on the tick it lands.
-    func advanceBallThrow(by deltaTime: TimeInterval) -> Bool {
-        guard var flight = ballThrow else { return false }
-        flight.elapsed = min(flight.elapsed + max(deltaTime, 0), 0.75)
-        let t = CGFloat(flight.elapsed / 0.75)
-        let arc = CGFloat(0.85) * 4 * t * (1 - t)
-        let x = flight.start.x + (flight.landing.x - flight.start.x) * t
-        let z = flight.start.z + (flight.landing.z - flight.start.z) * t
-        let y = flight.start.y + (flight.landing.y - flight.start.y) * t + arc
-        ballRoot.position = SCNVector3(x, y, z)
-        ballShadow.position = SCNVector3(x, ballShadow.position.y, z)
-        ballShadow.opacity = 0.3 + 0.7 * (1 - min(y / 1.8, 1))
-        if flight.elapsed >= 0.75 {
-            ballRoot.position = flight.landing
-            ballShadow.opacity = 1
-            ballThrow = nil
-            return true
+    /// Advances the in-flight ball. Returns its ground position and whether it has stopped;
+    /// `nil` when no throw is in flight.
+    @discardableResult
+    func advanceBallFlight(by deltaTime: TimeInterval) -> (ground: SIMD2<Double>, atRest: Bool)? {
+        guard var flight = ballFlight else { return nil }
+        flight.advance(by: deltaTime)
+        // Decay first, then arm: the loop's tick is longer than the squash, so arming last is
+        // what guarantees the impact frame actually renders squashed.
+        ballSquash = max(0, ballSquash - deltaTime)
+        if flight.bounceCount != lastBounceCount {
+            lastBounceCount = flight.bounceCount
+            ballSquash = Self.ballSquashDuration
         }
-        ballThrow = flight
-        return false
+        applyFlight(flight)
+        let result = (flight.groundPosition, flight.isAtRest)
+        ballFlight = flight.isAtRest ? nil : flight
+        if flight.isAtRest {
+            ballRoot.scale = SCNVector3(1, 1, 1)
+            ballShadow.scale = SCNVector3(1, 1, 1)
+            ballShadow.opacity = 1
+        }
+        return result
+    }
+
+    /// Renders one flight sample: position, spin, impact squash, and a shadow that shrinks
+    /// and fades with height so altitude reads on the ground (R7).
+    private func applyFlight(_ flight: BallFlight) {
+        let ground = flight.groundPosition
+        ballRoot.position = SCNVector3(ground.x, flight.height, ground.y)
+        // Roll about the axis perpendicular to travel: a ball that visibly spins the way it
+        // moves is most of what separates "thrown object" from "moving sprite".
+        let speed = hypot(flight.velocity.x, flight.velocity.z)
+        if speed > 1e-6 {
+            let axis = SCNVector3(CGFloat(flight.velocity.z / speed), 0, CGFloat(-flight.velocity.x / speed))
+            let angle = CGFloat(flight.travelled / BallFlight.radius)
+            ballRoot.rotation = SCNVector4(axis.x, axis.y, axis.z, angle)
+        }
+        if ballSquash > 0 {
+            // Squared falloff: the deformation is only at full strength on the contact frame
+            // and is nearly gone a frame later, which reads as an impact rather than a
+            // permanently flattened ball.
+            let phase = ballSquash / Self.ballSquashDuration
+            let amount = CGFloat(phase * phase) * 0.14
+            ballRoot.scale = SCNVector3(1 + amount * 0.5, 1 - amount, 1 + amount * 0.5)
+        } else {
+            ballRoot.scale = SCNVector3(1, 1, 1)
+        }
+        let altitude = min(max((flight.height - BallFlight.radius) / 1.8, 0), 1)
+        ballShadow.position = SCNVector3(ground.x, ballShadow.position.y, ground.y)
+        ballShadow.opacity = 1 - 0.7 * CGFloat(altitude)
+        let shrink = 1 - 0.35 * CGFloat(altitude)
+        ballShadow.scale = SCNVector3(shrink, shrink, 1)
     }
 
     func attachBall(toMouth attach: Bool) {
@@ -415,7 +498,7 @@ final class SceneHost: SCNView {
 
     func removeBall() {
         ballRoot.removeAllActions()
-        ballThrow = nil
+        ballFlight = nil
         ballRoot.removeFromParentNode()
         ballRoot.isHidden = true
         ballShadow.isHidden = true
@@ -457,8 +540,8 @@ final class SceneHost: SCNView {
 
     /// Picks a wander target — the bowl, or a random point within the
     /// current walkable bounds — and commits to a gait for it. A requested
-    /// run downgrades to a walk if the target turns out too close to justify
-    /// running; check `isRunning` afterward to see which was actually
+    /// run downgrades to a walk if the picked target turns out too close to
+    /// justify running; check `isRunning` afterward to see which was actually
     /// chosen. No motion happens until `updatePresence(wandering: true, …)`.
     func startWander(running: Bool, towardBowl: Bool) {
         guard wanderEnabled, gaitSpeeds != nil else { return }
@@ -629,12 +712,14 @@ final class SceneHost: SCNView {
     func applyHomeProjection(home: NSRect, arena: NSRect) {
         let frustum = Frustum.arena(home: home, arena: arena)
         arenaFrustum = frustum
+        arenaHomeFrame = home
         cameraNode.camera?.projectionTransform = frustum.matrix
     }
 
     /// Returns to the ordinary home projection. Call after the panel is back at its home frame.
     func restoreProjection() {
         arenaFrustum = nil
+        arenaHomeFrame = nil
         applyHomeProjection()
     }
 
@@ -707,6 +792,89 @@ final class SceneHost: SCNView {
         return ground
     }
 
+    // MARK: - Aim (R2, R4)
+
+    /// The ground spot the held ball is aimed at: shows the marker there, and gives the dog
+    /// something to turn toward and watch. Pass `nil` to clear.
+    func setAimTarget(_ ground: SIMD2<Double>?) {
+        aimTarget = ground
+        guard let ground else {
+            aimMarker.isHidden = true
+            return
+        }
+        aimMarker.position = SCNVector3(ground.x, aimMarker.position.y, ground.y)
+        aimMarker.isHidden = false
+        setNeedsDisplay(bounds)
+    }
+
+    /// Eases the body yaw and head gaze toward the aim spot. Called every tick while an item
+    /// is on the cursor, in place of `updatePresence` — the cursor is usually outside this
+    /// view's bounds while aiming, which the presence path's "nearby" gate would reject.
+    func advanceAim(deltaTime: TimeInterval) {
+        guard deltaTime > 0, let aimTarget else { return }
+        let dx = Double(aimTarget.x) - Double(petAnchor.position.x)
+        let dz = Double(aimTarget.y) - Double(petAnchor.position.z)
+        if hypot(dx, dz) > 0.05 {
+            petAnchor.eulerAngles.y = CGFloat(easedAngle(
+                current: Double(petAnchor.eulerAngles.y),
+                target: atan2(dx, dz),
+                tau: Self.facingEaseTau,
+                deltaTime: deltaTime
+            ))
+        }
+        // Eyes on the ball, which is at the cursor, not on the ground: aim a little above the
+        // marked spot so the head lifts rather than dropping to the floor.
+        let look = SCNVector3(aimTarget.x, 0.55, aimTarget.y)
+        var target: (yaw: CGFloat, pitch: CGFloat) = (0, 0)
+        if let head = headNode, let aim = gazeAim(atWorld: look, head: head) { target = aim }
+        gazeYaw = CGFloat(easedAngle(
+            current: Double(gazeYaw), target: Double(target.yaw), tau: Self.gazeEaseTau, deltaTime: deltaTime
+        ))
+        gazePitch = CGFloat(easedAngle(
+            current: Double(gazePitch), target: Double(target.pitch), tau: Self.gazeEaseTau, deltaTime: deltaTime
+        ))
+        gazeSnapshot.store(SCNVector3(gazePitch, gazeYaw, petAnchor.eulerAngles.y))
+        blobShadow.position = SCNVector3(petAnchor.position.x, blobShadow.position.y, petAnchor.position.z)
+    }
+
+    /// Pulls `point` into the ground region that is visible in the home panel, so a dog sent
+    /// there - and the ball it presents once it arrives - are still on screen after the arena
+    /// collapses (KTD5).
+    ///
+    /// Uses the recorded home frame and its own frustum maths rather than
+    /// `walkableXRange`, whose `projectPoint`/`unprojectPoint` calls ignore the arena
+    /// projection override and would answer for the full-screen viewport instead.
+    func homeRegionClamp(_ point: SIMD2<Double>) -> SIMD2<Double> {
+        let home = arenaHomeFrame ?? bounds
+        guard home.width > 0, home.height > 0 else { return point }
+        let frustum = Frustum.symmetric(aspect: Double(home.width / home.height))
+        // Leave the drop's depth in hand: the dog sets the ball down that much nearer the
+        // camera, and a dog standing on the near edge would present it past that edge.
+        let nearest = Double(Self.wanderZRange.upperBound) - FetchSequence.dropDistance
+        let z = min(max(point.y, Double(Self.wanderZRange.lowerBound)), nearest)
+        // Size the lateral limit where the pair sits closest to the camera - the ball's spot -
+        // because that is where the visible ground is narrowest.
+        let visible = groundHalfWidth(atZ: z + FetchSequence.dropDistance, frustum: frustum)
+        guard visible > 0 else { return SIMD2(0, z) }
+        // Keep a couple of body radii off the visible edge so nothing is half-clipped once
+        // the arena collapses - but never more than a third of the range, because close to
+        // the camera the panel is only ~1 unit wide and a fixed margin would collapse every
+        // target onto x = 0, which reads as "always returns to the middle" (R10).
+        let margin = min(Double(petRadius) * 2.5, visible / 3)
+        let halfWidth = visible - margin
+        return SIMD2(min(max(point.x, -halfWidth), halfWidth), z)
+    }
+
+    /// Half the width of the ground plane visible at depth `z` under `frustum`. The camera
+    /// has pitch only, so view-space x is world x and one depth read is enough.
+    private func groundHalfWidth(atZ z: Double, frustum: Frustum) -> Double {
+        let inverse = simd_inverse(cameraNode.simdWorldTransform)
+        let view = inverse * SIMD4<Float>(0, 0, Float(z), 1)
+        let depth = Double(-view.z)
+        guard depth > frustum.near else { return 0 }
+        return frustum.right * depth / frustum.near
+    }
+
     // MARK: - Gaze
 
     /// Attaches the additive head-aim constraint once a rig is set. Uses
@@ -773,7 +941,12 @@ final class SceneHost: SCNView {
         guard abs(rayZ) > 0.0001 else { return nil }
         let t = (depthZ - near.z) / rayZ
         let targetWorld = SCNVector3(near.x + (far.x - near.x) * t, near.y + (far.y - near.y) * t, depthZ)
+        return gazeAim(atWorld: targetWorld, head: head)
+    }
 
+    /// The same aim, for a target already known in world space (the aim marker's spot).
+    private func gazeAim(atWorld targetWorld: SCNVector3, head: SCNNode) -> (yaw: CGFloat, pitch: CGFloat)? {
+        let headWorld = head.presentation.worldPosition
         let dx = Double(targetWorld.x - headWorld.x)
         let dy = Double(targetWorld.y - headWorld.y)
         let dz = Double(targetWorld.z - headWorld.z)
