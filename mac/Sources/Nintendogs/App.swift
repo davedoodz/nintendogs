@@ -1,5 +1,6 @@
 import SwiftUI
 import PetKit
+import Darwin
 
 @main
 struct NintendogsApp: App {
@@ -142,6 +143,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                         self.lastSave = now
                     }
                 }
+            }
+            // Clip parsing leaves reusable malloc pages behind. Return those pages after the
+            // launch autorelease pool drains so this tiny utility stays inside its idle RSS gate.
+            DispatchQueue.main.async {
+                _ = malloc_zone_pressure_relief(nil, 0)
             }
         } catch {
             failure = error.localizedDescription
