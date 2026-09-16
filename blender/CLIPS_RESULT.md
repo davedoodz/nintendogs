@@ -185,6 +185,61 @@ Walk/run/carry loop, floor, <20-degree frame-step, and fresh-import checks pass;
 base and tier-2 authoring commands completed with renders enabled and both
 verification commands exited zero. Export settings and geometry remain unchanged.
 
+## Third tier: 10 storyboard petting/call clips
+
+`tier3_clips.py` reuses the existing pose helpers and unmodified `Rig` pipeline.
+`shiba_clips_tier3.blend` contains exactly these ten actions, active on
+`shiba_pet_head_loop`. All actions have 28 sampled channels at 30 fps, exact
+frame counts, and unchanged source geometry, weights, UVs, materials and rig.
+The contract Clip list now has 34 entries (plus the separate Step-0 test asset).
+
+| Clip | Frames | Loop | Motion / endpoint | Maximum seam angle |
+| --- | ---: | --- | --- | ---: |
+| `shiba_pet_head_loop` | 60 | yes | Upward head lean/tilt, folded ears, relaxed jaw | 0° |
+| `shiba_pet_settle` | 90 | no | Idle → sit → held 75° root-roll side pose | 0° |
+| `shiba_lie_side_loop` | 120 | yes | Side hold, ear flick, six-frame hind-paw twitch, tail tip | 0° |
+| `shiba_belly_loop` | 90 | yes | 170° roll, supported back-arching pose, alternating forepaw curl | 0° |
+| `shiba_lie_side_up` | 45 | no | Side first frame → head lift → sit_idle first frame | 0° |
+| `shiba_call_stun` | 15 | no | Idle → ears snap forward in first three frames → freeze | 0° |
+| `shiba_call_curious` | 40 | no | Held stun → yaw/tilt and asymmetric ears → held stun | 0° |
+| `shiba_paws_up_enter` | 30 | no | Held call → seated rear and raised camera-facing pads | 0° |
+| `shiba_paws_up_loop` | 90 | yes | Alternating forward paw pushes, small head bob/rear wiggle | 0° |
+| `shiba_paws_down` | 30 | no | Raised paws lower along clearance arc → sit_idle first frame | 0° |
+
+All six protected joints (`tail1`, `neck`, hips, shoulders) remain unrotated;
+the export limit stays strictly under 7°. All four loops close exactly. The
+four accepted-state entry/exit checks and eight full-pose chain checks have
+zero matrix error. The additional side/belly comparison checks all eight hind
+leg local channels; error is below 0.0000004. Its excluded joints and reason
+are recorded explicitly: root/support, forepaws and head are intentionally
+different, and the remaining joints are outside that partial-pose comparison.
+
+`tier3_validation.json` stores the manifest, native export settings, chain
+results and protected-asset SHA-256 hashes. `tier3_roundtrip_validation.json`
+independently reopens the blend and all ten DAEs, checks every frame for floor
+penetration and discontinuities, repeats exported loop/state/chain comparisons,
+and checks pad facing and forward displacement. The source rest mesh extends
+approximately .001579 below world zero; all poses remain within the unchanged
+-.003 floor tolerance. Maximum fresh-import error is under .000003 source units
+and the maximum joint step is under 9 degrees (unchanged 20-degree ceiling).
+Both pad normals face +Z throughout the paws loop (minimum dot product 1.0).
+
+Four event-selected QA frames per clip were rendered and inspected, plus one
+retained representative per new clip in `previews/`. `review_sheets.ps1` assembles
+the existing QA frames for review without editing animation. Side/belly poses
+do not penetrate the floor beyond the source-rest tolerance; support/readability
+limitations are listed below. The paws-up front view clearly shows both pads.
+Eyes, blink, tongue, breathing and mood-tail layers are deliberately absent:
+the source open-eye texture remains visible in these authoring previews.
+
+```powershell
+& 'C:\Program Files\Blender Foundation\Blender 4.2\blender.exe' --background --factory-startup --python-exit-code 1 --python blender/author_clips.py -- --tier3
+& 'C:\Program Files\Blender Foundation\Blender 4.2\blender.exe' --background --factory-startup --python-exit-code 1 --python blender/verify_clips.py -- --tier3
+```
+
+Both commands exit zero with authoring renders enabled. These are Blender-side
+authoring results only; Mac playback acceptance remains pending.
+
 ## Open issues
 
 - The specified 0.65 walk duty with quarter-cycle offsets produces three-paw
@@ -206,3 +261,30 @@ verification commands exited zero. Export settings and geometry remain unchanged
 - The short-stride values supplied here measure slower than the storyboard's
   illustrative 0.7-body-heights/s figure. They are not silently multiplied;
   Mac GaitStride should use the measured contact speed.
+- The literal side-pose numbers left the model propped on a lower paw, with the
+  torso floating. The lower right knee/elbow now tuck using distal roll (70°
+  before the 10% relaxation), waist roll is 2° rather than 20°, and the root's
+  requested lowering is -1.15 before the unchanged floor correction. The 75°
+  root roll is preserved rather than relaxed. The held pose rests on the lower
+  shoulder/thigh; the belly side is about .12–.20 above the floor and the head
+  remains lifted about .41. It is a supported side-rest gesture, **not verified
+  head-on-floor sleep**. The untouched rigid shoulder/hip pieces prevent a flat
+  splay with these exact posture constraints; no seam limit is exceeded.
+- Belly-up keeps root roll 170° but adds -12° whole-root pitch, head pitch 80°,
+  and distal tail pitches -35°/-20° so neither an ear nor the tail tip props up
+  the body. Root lowering is -1.25 before floor correction. It reads as an
+  arched belly presentation, not a perfectly flat-backed rest. Hind local
+  channels remain identical to side frame 1, including their asymmetric tuck.
+- The call chain explicitly requires stun-last = curious-first = enter-first,
+  while also requiring curious-last = enter-first. Curious therefore returns
+  its yaw/tilt and ear asymmetry to STUN by frame 39, holding frame 40.
+- Exact .6/1.2-Hz pet head/ear oscillations cannot repeat in the supplied
+  60-frame loop. Whole harmonics give approximately .508/1.017 Hz (jaw 1.525
+  Hz). Belly curls use two cycles, .674 Hz instead of .8. The side loop's
+  storyboard chest breathing is omitted because this task assigns breathing
+  exclusively to the Mac runtime. Sit_idle/sleep breathing is unchanged.
+- Forepaw pushes use opposing distal elbow/wrist rotations instead of bone
+  translations: approximately .02 forward, with a small downward arc. Pad
+  orientation is preserved. Pelvis lowering leads the sit blend during entry,
+  and a distal clearance arc prevents a forepaw from lifting the whole dog
+  via the floor guard during paws-down.

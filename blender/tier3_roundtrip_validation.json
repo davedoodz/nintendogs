@@ -1,0 +1,511 @@
+{
+  "clips": {
+    "shiba_belly_loop": {
+      "minimum_world_height": -0.0015791556797921658,
+      "max_joint_step_degrees": 1.128118439548911,
+      "body_joint_max_degrees": {
+        "tail1": 0,
+        "neck": 0,
+        "Lleg1": 0,
+        "Rleg1": 0,
+        "Larm1": 0,
+        "Rarm1": 0
+      },
+      "loop_endpoint_max_error": 0.0,
+      "fresh_dae_max_vertex_error": 1.9804534585280597e-06
+    },
+    "shiba_call_curious": {
+      "minimum_world_height": -0.0015789568424224854,
+      "max_joint_step_degrees": 5.128444123209489,
+      "body_joint_max_degrees": {
+        "tail1": 0,
+        "neck": 0,
+        "Lleg1": 0,
+        "Rleg1": 0,
+        "Larm1": 0,
+        "Rarm1": 0
+      },
+      "fresh_dae_max_vertex_error": 1.5568683012257787e-06
+    },
+    "shiba_call_stun": {
+      "minimum_world_height": -0.0015789568424224854,
+      "max_joint_step_degrees": 4.999969972468842,
+      "body_joint_max_degrees": {
+        "tail1": 0,
+        "neck": 0,
+        "Lleg1": 0,
+        "Rleg1": 0,
+        "Larm1": 0,
+        "Rarm1": 0
+      },
+      "entry": {
+        "state": "shiba_idle_loop",
+        "max_matrix_error": 0.0
+      },
+      "fresh_dae_max_vertex_error": 1.5568683012257787e-06
+    },
+    "shiba_lie_side_loop": {
+      "minimum_world_height": -0.0015790910692885518,
+      "max_joint_step_degrees": 4.999813305004754,
+      "body_joint_max_degrees": {
+        "tail1": 0,
+        "neck": 0,
+        "Lleg1": 0,
+        "Rleg1": 0,
+        "Larm1": 0,
+        "Rarm1": 0
+      },
+      "loop_endpoint_max_error": 0.0,
+      "fresh_dae_max_vertex_error": 1.36050131446282e-06
+    },
+    "shiba_lie_side_up": {
+      "minimum_world_height": -0.0015792102785781026,
+      "max_joint_step_degrees": 8.167786950085015,
+      "body_joint_max_degrees": {
+        "tail1": 0,
+        "neck": 0,
+        "Lleg1": 0,
+        "Rleg1": 0,
+        "Larm1": 0,
+        "Rarm1": 0
+      },
+      "handoff": {
+        "state": "shiba_sit_idle_loop",
+        "max_matrix_error": 0.0
+      },
+      "fresh_dae_max_vertex_error": 2.242909398344371e-06
+    },
+    "shiba_paws_down": {
+      "minimum_world_height": -0.0015791208716109395,
+      "max_joint_step_degrees": 6.642849033910348,
+      "body_joint_max_degrees": {
+        "tail1": 0,
+        "neck": 0,
+        "Lleg1": 0,
+        "Rleg1": 0,
+        "Larm1": 0,
+        "Rarm1": 0
+      },
+      "handoff": {
+        "state": "shiba_sit_idle_loop",
+        "max_matrix_error": 0.0
+      },
+      "fresh_dae_max_vertex_error": 2.158984913735501e-06
+    },
+    "shiba_paws_up_enter": {
+      "minimum_world_height": -0.0015793372876942158,
+      "max_joint_step_degrees": 8.682174472894198,
+      "body_joint_max_degrees": {
+        "tail1": 0,
+        "neck": 0,
+        "Lleg1": 0,
+        "Rleg1": 0,
+        "Larm1": 0,
+        "Rarm1": 0
+      },
+      "fresh_dae_max_vertex_error": 1.922192036699905e-06
+    },
+    "shiba_paws_up_loop": {
+      "minimum_world_height": 0.013726543635129929,
+      "max_joint_step_degrees": 1.0347542359064796,
+      "minimum_pad_normal_dot_forward": 1.0,
+      "body_joint_max_degrees": {
+        "tail1": 0,
+        "neck": 0,
+        "Lleg1": 0,
+        "Rleg1": 0,
+        "Larm1": 0,
+        "Rarm1": 0
+      },
+      "exported_paw_pushes": {
+        "L": {
+          "frame": 19,
+          "source_delta": [
+            0.0,
+            -0.05457484722137451,
+            0.01991748809814453
+          ]
+        },
+        "R": {
+          "frame": 54,
+          "source_delta": [
+            -2.9802322387695312e-08,
+            -0.05436813831329346,
+            0.01985311508178711
+          ]
+        }
+      },
+      "loop_endpoint_max_error": 0.0,
+      "fresh_dae_max_vertex_error": 1.6864665263457576e-06
+    },
+    "shiba_pet_head_loop": {
+      "minimum_world_height": 0.003265457460656762,
+      "max_joint_step_degrees": 0.47642218311193263,
+      "body_joint_max_degrees": {
+        "tail1": 0,
+        "neck": 0,
+        "Lleg1": 0,
+        "Rleg1": 0,
+        "Larm1": 0,
+        "Rarm1": 0
+      },
+      "loop_endpoint_max_error": 0.0,
+      "fresh_dae_max_vertex_error": 2.204767672798834e-06
+    },
+    "shiba_pet_settle": {
+      "minimum_world_height": -0.0015793422935530543,
+      "max_joint_step_degrees": 8.247860672819659,
+      "body_joint_max_degrees": {
+        "tail1": 0,
+        "neck": 0,
+        "Lleg1": 0,
+        "Rleg1": 0,
+        "Larm1": 0,
+        "Rarm1": 0
+      },
+      "entry": {
+        "state": "shiba_idle_loop",
+        "max_matrix_error": 0.0
+      },
+      "fresh_dae_max_vertex_error": 1.8352036855626884e-06
+    }
+  },
+  "chains": [
+    {
+      "from_clip": "shiba_call_stun",
+      "from_index": -1,
+      "to_clip": "shiba_call_curious",
+      "to_index": 0,
+      "max_matrix_error": 0.0,
+      "joints": [
+        "skl_root",
+        "waist",
+        "tail1",
+        "tail2",
+        "tail3",
+        "Lleg1",
+        "Lleg2",
+        "Lfoot1",
+        "Lfoot2",
+        "Rleg1",
+        "Rleg2",
+        "Rfoot1",
+        "Rfoot2",
+        "spin",
+        "Larm1",
+        "Larm2",
+        "Lhand1",
+        "Lhand2",
+        "Rarm1",
+        "Rarm2",
+        "Rhand1",
+        "Rhand2",
+        "chest",
+        "neck",
+        "head",
+        "Rear1",
+        "Lear1",
+        "mouth"
+      ]
+    },
+    {
+      "from_clip": "shiba_call_stun",
+      "from_index": -1,
+      "to_clip": "shiba_paws_up_enter",
+      "to_index": 0,
+      "max_matrix_error": 0.0,
+      "joints": [
+        "skl_root",
+        "waist",
+        "tail1",
+        "tail2",
+        "tail3",
+        "Lleg1",
+        "Lleg2",
+        "Lfoot1",
+        "Lfoot2",
+        "Rleg1",
+        "Rleg2",
+        "Rfoot1",
+        "Rfoot2",
+        "spin",
+        "Larm1",
+        "Larm2",
+        "Lhand1",
+        "Lhand2",
+        "Rarm1",
+        "Rarm2",
+        "Rhand1",
+        "Rhand2",
+        "chest",
+        "neck",
+        "head",
+        "Rear1",
+        "Lear1",
+        "mouth"
+      ]
+    },
+    {
+      "from_clip": "shiba_call_curious",
+      "from_index": -1,
+      "to_clip": "shiba_paws_up_enter",
+      "to_index": 0,
+      "max_matrix_error": 0.0,
+      "joints": [
+        "skl_root",
+        "waist",
+        "tail1",
+        "tail2",
+        "tail3",
+        "Lleg1",
+        "Lleg2",
+        "Lfoot1",
+        "Lfoot2",
+        "Rleg1",
+        "Rleg2",
+        "Rfoot1",
+        "Rfoot2",
+        "spin",
+        "Larm1",
+        "Larm2",
+        "Lhand1",
+        "Lhand2",
+        "Rarm1",
+        "Rarm2",
+        "Rhand1",
+        "Rhand2",
+        "chest",
+        "neck",
+        "head",
+        "Rear1",
+        "Lear1",
+        "mouth"
+      ]
+    },
+    {
+      "from_clip": "shiba_paws_up_enter",
+      "from_index": -1,
+      "to_clip": "shiba_paws_up_loop",
+      "to_index": 0,
+      "max_matrix_error": 0.0,
+      "joints": [
+        "skl_root",
+        "waist",
+        "tail1",
+        "tail2",
+        "tail3",
+        "Lleg1",
+        "Lleg2",
+        "Lfoot1",
+        "Lfoot2",
+        "Rleg1",
+        "Rleg2",
+        "Rfoot1",
+        "Rfoot2",
+        "spin",
+        "Larm1",
+        "Larm2",
+        "Lhand1",
+        "Lhand2",
+        "Rarm1",
+        "Rarm2",
+        "Rhand1",
+        "Rhand2",
+        "chest",
+        "neck",
+        "head",
+        "Rear1",
+        "Lear1",
+        "mouth"
+      ]
+    },
+    {
+      "from_clip": "shiba_paws_up_loop",
+      "from_index": 0,
+      "to_clip": "shiba_paws_up_loop",
+      "to_index": -1,
+      "max_matrix_error": 0.0,
+      "joints": [
+        "skl_root",
+        "waist",
+        "tail1",
+        "tail2",
+        "tail3",
+        "Lleg1",
+        "Lleg2",
+        "Lfoot1",
+        "Lfoot2",
+        "Rleg1",
+        "Rleg2",
+        "Rfoot1",
+        "Rfoot2",
+        "spin",
+        "Larm1",
+        "Larm2",
+        "Lhand1",
+        "Lhand2",
+        "Rarm1",
+        "Rarm2",
+        "Rhand1",
+        "Rhand2",
+        "chest",
+        "neck",
+        "head",
+        "Rear1",
+        "Lear1",
+        "mouth"
+      ]
+    },
+    {
+      "from_clip": "shiba_paws_up_loop",
+      "from_index": 0,
+      "to_clip": "shiba_paws_down",
+      "to_index": 0,
+      "max_matrix_error": 0.0,
+      "joints": [
+        "skl_root",
+        "waist",
+        "tail1",
+        "tail2",
+        "tail3",
+        "Lleg1",
+        "Lleg2",
+        "Lfoot1",
+        "Lfoot2",
+        "Rleg1",
+        "Rleg2",
+        "Rfoot1",
+        "Rfoot2",
+        "spin",
+        "Larm1",
+        "Larm2",
+        "Lhand1",
+        "Lhand2",
+        "Rarm1",
+        "Rarm2",
+        "Rhand1",
+        "Rhand2",
+        "chest",
+        "neck",
+        "head",
+        "Rear1",
+        "Lear1",
+        "mouth"
+      ]
+    },
+    {
+      "from_clip": "shiba_pet_settle",
+      "from_index": -1,
+      "to_clip": "shiba_lie_side_loop",
+      "to_index": 0,
+      "max_matrix_error": 0.0,
+      "joints": [
+        "skl_root",
+        "waist",
+        "tail1",
+        "tail2",
+        "tail3",
+        "Lleg1",
+        "Lleg2",
+        "Lfoot1",
+        "Lfoot2",
+        "Rleg1",
+        "Rleg2",
+        "Rfoot1",
+        "Rfoot2",
+        "spin",
+        "Larm1",
+        "Larm2",
+        "Lhand1",
+        "Lhand2",
+        "Rarm1",
+        "Rarm2",
+        "Rhand1",
+        "Rhand2",
+        "chest",
+        "neck",
+        "head",
+        "Rear1",
+        "Lear1",
+        "mouth"
+      ]
+    },
+    {
+      "from_clip": "shiba_lie_side_loop",
+      "from_index": 0,
+      "to_clip": "shiba_lie_side_up",
+      "to_index": 0,
+      "max_matrix_error": 0.0,
+      "joints": [
+        "skl_root",
+        "waist",
+        "tail1",
+        "tail2",
+        "tail3",
+        "Lleg1",
+        "Lleg2",
+        "Lfoot1",
+        "Lfoot2",
+        "Rleg1",
+        "Rleg2",
+        "Rfoot1",
+        "Rfoot2",
+        "spin",
+        "Larm1",
+        "Larm2",
+        "Lhand1",
+        "Lhand2",
+        "Rarm1",
+        "Rarm2",
+        "Rhand1",
+        "Rhand2",
+        "chest",
+        "neck",
+        "head",
+        "Rear1",
+        "Lear1",
+        "mouth"
+      ]
+    },
+    {
+      "from_clip": "shiba_lie_side_loop",
+      "to_clip": "shiba_belly_loop",
+      "from_index": 0,
+      "to_index": 0,
+      "joints": [
+        "Lleg1",
+        "Lleg2",
+        "Lfoot1",
+        "Lfoot2",
+        "Rleg1",
+        "Rleg2",
+        "Rfoot1",
+        "Rfoot2"
+      ],
+      "max_matrix_error": 3.166496753692627e-07,
+      "excluded_joints": [
+        "Larm1",
+        "Larm2",
+        "Lear1",
+        "Lhand1",
+        "Lhand2",
+        "Rarm1",
+        "Rarm2",
+        "Rear1",
+        "Rhand1",
+        "Rhand2",
+        "chest",
+        "head",
+        "mouth",
+        "neck",
+        "skl_root",
+        "spin",
+        "tail1",
+        "tail2",
+        "tail3",
+        "waist"
+      ],
+      "exclusion_reason": "Only hind-leg local matrices match: whole-root roll/support height, forepaws and head intentionally differ; other joints are outside this contract comparison."
+    }
+  ]
+}

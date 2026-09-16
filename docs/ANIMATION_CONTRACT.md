@@ -66,7 +66,7 @@ If step 1 fails (no armature, exploded weights), stop and report — the fallbac
 
 **Result: GO (2026-09-16).** Blender 4.2.23 preserved all 28 bones, the hierarchy, weights, UVs and materials. The corrected 30-sample `tail2` matrices moved only tail vertices while `tail1` stayed stationary. The native Mac app transferred that channel by node name onto the original coat-B rig and the white-background captures show a continuous butt-to-tail silhouette at both sampled poses. Evidence: `blender/step0_validation.json` and `docs/screens/native-tailwag-seam-fixed.png`.
 
-## Clip list (24)
+## Clip list (34)
 
 | File | Loop | Notes |
 | --- | --- | --- |
@@ -76,8 +76,8 @@ If step 1 fails (no armature, exploded weights), stop and report — the fallbac
 | `shiba_lie_down.dae` | no | sit → lie, ends held |
 | `shiba_sleep_loop.dae` | yes | lying, slow breath |
 | `shiba_eat_loop.dae` | yes | head down, jaw (`mouth`) chewing |
-| `shiba_walk_loop.dae` | yes | in-place, root does not translate |
-| `shiba_run_loop.dae` | yes | in-place |
+| `shiba_walk_loop.dae` | yes | in-place horizontally, vertical root bob; 0.65 duty; 40 frames |
+| `shiba_run_loop.dae` | yes | in-place horizontally, vertical root bob/suspension; 0.55 nominal duty; 28 frames |
 | `shiba_bark.dae` | no | 2 barks, `mouth` keyed |
 | `shiba_fetch_pickup.dae` | no | head dip, mouth close |
 | `shiba_happy.dae` | no | tail wag + bounce, used on pet/return |
@@ -94,6 +94,16 @@ If step 1 fails (no armature, exploded weights), stop and report — the fallbac
 | `shiba_pet_react.dae` | no | head tilt, ears back, distal horizontal tail wag → idle first frame; 75 frames |
 | `shiba_shake.dae` | no | head/chest/waist alternate small yaw → idle first frame; 45 frames |
 | `shiba_fetch_carry_loop.dae` | yes | accepted in-place walk cycle, head up, mouth closed; 40 frames |
+| `shiba_pet_head_loop.dae` | yes | soothing head lean/bob, ears back, soft jaw motion; 60 frames |
+| `shiba_pet_settle.dae` | no | idle → sit → held right-side pose matching lie_side_loop frame 1; 90 frames |
+| `shiba_lie_side_loop.dae` | yes | side rest, distal hind-paw twitch, ear flick, lazy tail tip; 120 frames |
+| `shiba_belly_loop.dae` | yes | belly-up, alternating forepaw curls, open jaw; hind-leg local entry matches side loop; 90 frames |
+| `shiba_lie_side_up.dae` | no | lie_side_loop frame 1 → head lift → sit_idle frame 1; 45 frames |
+| `shiba_call_stun.dae` | no | idle → held freeze, ears prick in 3 frames; 15 frames |
+| `shiba_call_curious.dae` | no | stun final → head turn/tilt → same held call pose; 40 frames |
+| `shiba_paws_up_enter.dae` | no | curious final → seated rear, forepaws raised with pads toward viewer; 30 frames |
+| `shiba_paws_up_loop.dae` | yes | holds enter final, alternating small forepaw pushes, head bob/rear wiggle; 90 frames |
+| `shiba_paws_down.dae` | no | paws_up_loop frame 1 → sit_idle frame 1; 30 frames |
 
 Locomotion is in-place; the app moves `skl_root`'s parent. Non-loop clips end on a pose the next state can start from (sit ends in sit_idle's first frame, etc.).
 
