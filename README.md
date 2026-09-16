@@ -14,7 +14,7 @@ mac/scripts/bundle.sh release
 
 Bundle: `mac/build/Nintendogs.app`. It contains the local Shiba models and textures, so it does not need the repository beside it. macOS 14+; the current build targets the host architecture. The bundle is ad-hoc signed for local use, not notarized or distributed.
 
-Implemented: a menu-bar app, borderless floating non-activating panel, transparent SceneKit view, fixed camera, lighting, blob shadow, model normalization, explicit black-and-tan Shiba coat-B texture assignment, and show/hide/rotate controls. Clicking the Shiba rotates it 90°; dragging the panel still moves the window. **No autonomous behavior, care loop, or authored animations yet.**
+Implemented: a menu-bar app, borderless floating non-activating panel, transparent SceneKit view, fixed camera, lighting, blob shadow, model normalization, explicit black-and-tan Shiba coat-B texture assignment, cross-rig Collada animation transfer by node name, and show/hide/rotate controls. The one-second Blender tail-wag proof loops on the original coat-B rig without re-skinning. Clicking the Shiba rotates it 90°; dragging the panel still moves the window. **No autonomous behavior, care loop, or production animation set yet.**
 
 The release build, signature verification and plist validation pass. A fresh `npm run assets:mac` download was verified in a temporary directory, including all three coats and their textures. All 12 asset files in the bundle match the source files.
 

@@ -24,11 +24,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         panel.orderFrontRegardless()
         do {
             guard let url = AssetLocator.shibaModel() else {
-                throw NSError(domain: "Nintendogs", code: 1, userInfo: [NSLocalizedDescriptionKey: "Shiba assets not found. Run `npm run assets:mac`."])
+                throw AssetLocator.MissingAsset(message: "Shiba assets not found. Run `npm run assets:mac`.")
             }
             let loaded = try ModelLoader.load(url, targetHeight: SceneHost.dogHeight)
             panel.sceneHost.setPet(loaded.node)
-            status = String(format: "Black Shiba loaded · %d skinned mesh · raw height %.1f", loaded.skinnedMeshCount, loaded.rawHeight)
+            guard let clipURL = AssetLocator.shibaClip(named: "shiba_test_tailwag") else {
+                throw AssetLocator.MissingAsset(message: "Tail-wag clip not found.")
+            }
+            let clip = try AnimationLoader.apply(
+                clipURL,
+                to: loaded.node,
+                key: "tailwag",
+                repeats: true
+            )
+            panel.sceneHost.setAnimationActive(true)
+            status = String(
+                format: "Black Shiba loaded · tail wag %.1fs on %@",
+                clip.duration,
+                clip.targetNames.joined(separator: ", ")
+            )
         } catch {
             status = "Load failed: \(error.localizedDescription)"
         }

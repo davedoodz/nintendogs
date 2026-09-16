@@ -4,6 +4,13 @@ import Foundation
 /// Order: `NINTENDOGS_ASSETS` env, the app bundle's `Resources/Assets`,
 /// then `mac/Assets` relative to this source tree (for `swift run` / `swift test`).
 public enum AssetLocator {
+    public struct MissingAsset: LocalizedError {
+        public let message: String
+        public var errorDescription: String? { message }
+
+        public init(message: String) { self.message = message }
+    }
+
     public static func assetsRoot() -> URL? {
         let fm = FileManager.default
         if let env = ProcessInfo.processInfo.environment["NINTENDOGS_ASSETS"], fm.fileExists(atPath: env) {
@@ -22,5 +29,9 @@ public enum AssetLocator {
     /// Coat B is the black-and-tan Shiba variant from the local Nintendogs rip.
     public static func shibaModel(coat: String = "b") -> URL? {
         assetsRoot()?.appendingPathComponent("shiba/aSib_\(coat).nsbmd/Sib_\(coat).dae")
+    }
+
+    public static func shibaClip(named name: String) -> URL? {
+        assetsRoot()?.appendingPathComponent("shiba/clips/\(name).dae")
     }
 }

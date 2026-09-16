@@ -33,17 +33,17 @@ Rig — 28 joints, keep these names and hierarchy exactly:
 
 ```
 skl_root
-└ waist
-  ├ tail1 › tail2 › tail3
-  ├ Lleg1 › Lleg2 › Lfoot1 › Lfoot2
-  ├ Rleg1 › Rleg2 › Rfoot1 › Rfoot2
-  └ spin › chest
-    ├ Larm1 › Larm2 › Lhand1 › Lhand2
-    ├ Rarm1 › Rarm2 › Rhand1 › Rhand2
-    └ neck › head
-      ├ Lear1
-      ├ Rear1
-      └ mouth
+├ waist
+│ ├ tail1 › tail2 › tail3
+│ ├ Lleg1 › Lleg2 › Lfoot1 › Lfoot2
+│ └ Rleg1 › Rleg2 › Rfoot1 › Rfoot2
+└ spin
+  ├ Larm1 › Larm2 › Lhand1 › Lhand2
+  ├ Rarm1 › Rarm2 › Rhand1 › Rhand2
+  └ chest › neck › head
+    ├ Lear1
+    ├ Rear1
+    └ mouth
 ```
 
 SceneKit matches animation channels to nodes by name. Rename a bone, the clip silently does nothing.
@@ -61,6 +61,8 @@ SceneKit matches animation channels to nodes by name. Rename a bone, the clip si
 3. Commit + push. Mac side loads it on the coat-B model and reports back in the commit that follows.
 
 If step 1 fails (no armature, exploded weights), stop and report — the fallback is re-rigging, which changes this whole plan.
+
+**Result: GO (2026-09-16).** Blender 4.2.23 preserved all 28 bones, the hierarchy, weights, UVs and materials. Its 30 sampled `tail1` matrices moved only the 58 tail-weighted vertices. The native Mac app transferred that channel by node name onto the original coat-B rig and played the one-second loop with no re-skinning or remap. Evidence: `blender/step0_validation.json`, `docs/screens/native-tailwag-a.png`, and `docs/screens/native-tailwag-b.png`.
 
 ## Clip list (12)
 
@@ -95,9 +97,9 @@ Filename is the contract: `shiba_<name>[_loop].dae`. Mac side derives the state 
 
 ## Mac side (this is what consumes the files)
 
-- `ModelLoader.load` loads the base model; clips are loaded via `SCNSceneSource` and attached to the pet node as `SCNAnimationPlayer`s keyed by clip name.
-- Loop flag from filename sets `repeatCount = .infinity`.
-- `SCNView.isPlaying` flips on when a clip runs and off at idle-clip end-of-cycle boundaries only if no clip is queued (CPU budget: 0.0% idle).
+- `ModelLoader.load` loads the base model; `AnimationLoader.apply` loads each exported scene, copies its imported animation players to same-named nodes in the pet rig, and keys them by clip name.
+- The caller sets `repeats`; loop filenames pass `true`, one-shot clips pass `false`.
+- `SCNView.isPlaying` and continuous rendering are enabled while animation runs. The later state machine must stop both when no loop or queued clip remains to restore the 0.0% idle CPU budget.
 
 ## Reporting back
 

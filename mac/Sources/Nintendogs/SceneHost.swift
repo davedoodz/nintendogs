@@ -29,8 +29,7 @@ final class SceneHost: SCNView {
         allowsCameraControl = false
         antialiasingMode = .multisampling4X
         preferredFramesPerSecond = 30
-        isPlaying = false            // render on demand until animation exists (idle CPU budget)
-        rendersContinuously = false
+        setAnimationActive(false)    // render on demand until animation exists (idle CPU budget)
 
         let camera = SCNCamera()
         camera.fieldOfView = 38
@@ -76,6 +75,11 @@ final class SceneHost: SCNView {
         petAnchor.childNodes.forEach { $0.removeFromParentNode() }
         petAnchor.addChildNode(node)
         setNeedsDisplay(bounds)
+    }
+
+    func setAnimationActive(_ active: Bool) {
+        isPlaying = active
+        rendersContinuously = active
     }
 
     /// Spin the pet a quarter turn; used from the menu while the rip's facing is being confirmed.

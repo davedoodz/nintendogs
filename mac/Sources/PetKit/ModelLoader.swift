@@ -7,13 +7,18 @@ public struct LoadedModel {
 }
 
 public enum ModelLoader {
-    /// Loads a Collada rip, wraps it, and scales it so its bounding height equals `targetHeight`.
-    public static func load(_ url: URL, targetHeight: CGFloat) throws -> LoadedModel {
-        let source = try SCNScene(url: url, options: [
+    /// Shared by the base rig and every clip so imported channels use one axis convention.
+    public static var colladaOptions: [SCNSceneSource.LoadingOption: Any] {
+        [
             .checkConsistency: false,
             .convertToYUp: true,
             .flattenScene: false,
-        ])
+        ]
+    }
+
+    /// Loads a Collada rip, wraps it, and scales it so its bounding height equals `targetHeight`.
+    public static func load(_ url: URL, targetHeight: CGFloat) throws -> LoadedModel {
+        let source = try SCNScene(url: url, options: colladaOptions)
         let content = SCNNode()
         for child in source.rootNode.childNodes { content.addChildNode(child) }
         var skinned = 0
