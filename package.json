@@ -1,0 +1,19 @@
+{
+  "name": "nintendogs-desktop-study",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "assets": "node scripts/fetch-assets.mjs",
+    "assets:mac": "node scripts/fetch-assets.mjs --native",
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "vite": "^7.1.0"
+  }
+}

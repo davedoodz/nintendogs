@@ -2,3 +2,15 @@ node_modules/
 dist/
 .DS_Store
 .env*
+
+# Copyrighted game assets: browser rip stays local; the Shiba rip and authored
+# clips are committed to this PRIVATE repo for cross-machine work only. Never
+# make the repo public or redistribute them.
+public/assets/
+mac/.build/
+mac/build/
+
+# Blender scratch
+blender/**/*.blend1
+blender/**/*.blend@
+blender/**/__pycache__/
