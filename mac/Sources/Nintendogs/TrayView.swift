@@ -36,20 +36,25 @@ struct TrayView: View {
     }
 
     private func cell(_ item: ItemSprite) -> some View {
-        VStack(spacing: 4) {
-            item.view
-                .frame(width: 34, height: 34)
-            Text(item.label)
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.white.opacity(hovered == item ? 0.95 : 0.62))
+        Button {
+            onPick(item)
+        } label: {
+            VStack(spacing: 4) {
+                item.view
+                    .frame(width: 34, height: 34)
+                Text(item.label)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.white.opacity(hovered == item ? 0.95 : 0.62))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(Color.white.opacity(hovered == item ? 0.15 : 0))
+            )
+            .contentShape(Rectangle())
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 9)
-                .fill(Color.white.opacity(hovered == item ? 0.15 : 0))
-        )
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
         .onHover { inside in
             if inside {
                 hovered = item
@@ -57,6 +62,5 @@ struct TrayView: View {
                 hovered = nil
             }
         }
-        .onTapGesture { onPick(item) }
     }
 }

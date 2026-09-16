@@ -150,7 +150,9 @@ final class SceneHost: SCNView {
         self.scene = scene
         backgroundColor = .clear
         allowsCameraControl = false
-        antialiasingMode = .multisampling4X
+        // The Retina backing scale already smooths edges; MSAA kept the release process above
+        // the 120 MB resident-memory gate, especially after the arena render target expanded.
+        antialiasingMode = .none
         preferredFramesPerSecond = 30
         setAnimationActive(false)    // render on demand until animation exists (idle CPU budget)
 
@@ -278,7 +280,6 @@ final class SceneHost: SCNView {
         sphere.firstMaterial = felt
         let body = SCNNode(geometry: sphere)
         body.name = "fetchBall"
-        body.position.y = 0.08
         ballRoot.addChildNode(body)
 
         let seamRotations: [SCNVector3] = [
@@ -291,7 +292,6 @@ final class SceneHost: SCNView {
             seam.pipeSegmentCount = 8
             seam.firstMaterial?.diffuse.contents = NSColor.white.withAlphaComponent(0.9)
             let node = SCNNode(geometry: seam)
-            node.position.y = 0.08
             node.eulerAngles = rotation
             node.name = "fetchBallSeam"
             ballRoot.addChildNode(node)
@@ -329,7 +329,8 @@ final class SceneHost: SCNView {
             scene?.rootNode.addChildNode(ballRoot)
         }
         ballAttached = false
-        ballRoot.position = SCNVector3(position.x, 0, position.y)
+        ballRoot.scale = SCNVector3(1, 1, 1)
+        ballRoot.position = SCNVector3(position.x, 0.08, position.y)
         ballRoot.isHidden = false
         ballShadow.position = SCNVector3(position.x, ballShadow.position.y, position.y)
         ballShadow.isHidden = false
@@ -345,12 +346,13 @@ final class SceneHost: SCNView {
             petAnchor.position.y + 0.9,
             petAnchor.position.z + 1.6
         )
-        let destination = SCNVector3(landing.x, 0, landing.y)
+        let destination = SCNVector3(landing.x, 0.08, landing.y)
         ballRoot.removeAllActions()
         if ballRoot.parent !== scene?.rootNode {
             ballRoot.removeFromParentNode()
             scene?.rootNode.addChildNode(ballRoot)
         }
+        ballRoot.scale = SCNVector3(1, 1, 1)
         ballRoot.position = start
         ballRoot.isHidden = false
         ballShadow.isHidden = false
@@ -385,10 +387,11 @@ final class SceneHost: SCNView {
         if attach, let mouthNode {
             ballRoot.removeFromParentNode()
             mouthNode.addChildNode(ballRoot)
-            ballRoot.position = SCNVector3(0, 0.025, 0.09)
+            ballRoot.position = SCNVector3(0, 0, 0)
             ballRoot.eulerAngles = SCNVector3(0, 0, 0)
-            ballShadow.isHidden = true
             ballAttached = true
+            updateAttachedBallTransform()
+            ballShadow.isHidden = true
         } else {
             let world = ballRoot.presentation.worldPosition
             ballRoot.removeFromParentNode()
@@ -398,6 +401,15 @@ final class SceneHost: SCNView {
             ballShadow.isHidden = ballRoot.isHidden
             ballShadow.position = SCNVector3(world.x, ballShadow.position.y, world.z)
         }
+    }
+
+    /// Cancels the imported skeleton's animated uniform scale while the ball follows `mouth`.
+    func updateAttachedBallTransform() {
+        guard ballAttached, let mouthNode else { return }
+        let transform = mouthNode.presentation.simdWorldTransform
+        let xAxis = SIMD3<Float>(transform.columns.0.x, transform.columns.0.y, transform.columns.0.z)
+        let inheritedScale = max(simd_length(xAxis), Float.ulpOfOne)
+        ballRoot.simdScale = SIMD3<Float>(repeating: 1 / inheritedScale)
     }
 
     func removeBall() {
@@ -717,6 +729,10 @@ final class SceneHost: SCNView {
             return result
         }
         let constraint = SCNTransformConstraint(inWorldSpace: true, with: transformBlock)
+        // SceneKit defaults transform constraints to incremental evaluation, which feeds the
+        // previous rendered result into the next frame and can compound a small gaze offset
+        // into a full head rotation. Always compose from that frame's authored animation pose.
+        constraint.isIncremental = false
         head.constraints = [constraint]
     }
 

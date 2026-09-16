@@ -39,7 +39,7 @@ The imported rig faces **+Z**: head/mouth positions established this in a bundle
 ## Attention and play
 
 - Hover: alert, then a happy response; sustained attention slowly increases affection.
-- Cursor nearby: limited, eased head aim, composited after authored animation. Head position is preserved, and body-adjacent joints are not distorted.
+- Cursor nearby: limited, eased head aim, composited from each frame's authored animation pose. The SceneKit transform constraint is explicitly non-incremental so a held gaze cannot compound into a full head rotation. Head position is preserved, and body-adjacent joints are not distorted.
 - Single-click the dog: call/wake.
 - Stroke across it: pet.
 - Double-click it: play.
@@ -70,6 +70,8 @@ Evidence in `mac/build/aliveness-proof/`:
 - `unattended-10s.png`, `unattended-60s.png`, `unattended-300s.png`: representative frames.
 
 Checks cover all 24 clips actually changing bone transforms; viewport-edge pixels throughout the recording; root travel; pause/resume; posture routes; queued-walk cancellation; sustained play; sleep/stir/return; greeting/care preemption; and preview isolation. Separate headless input checks cover real hit-testing, click, double-click, and strokes. Gaze checks verify left/right/up/down direction and an unchanged head-joint origin. Persistence checks cover feeding 80 → 50, JSON reload, legacy saves, and backward clocks.
+
+The first directional gaze snapshots did not exercise SceneKit's frame-to-frame constraint evaluation and missed a live cumulative head-spin defect. The corrected proof renders 3,600 continuous Metal frames with a held cursor, changing body yaw, 30 Hz scene updates, 60 Hz rendering, a sleeping neutral interval, and a stopped-animation interval. The gaze remained within **20.713°**, returned to **0.040°** during sleep, and moved the head joint origin by **0.000000**. A focused SceneKit reproduction measured the unsafe default at **60° after twelve 5° frames** versus **5°** with non-incremental evaluation. Evidence: `mac/build/gaze-spin-proof/metal-after/`.
 
 A 60-second real-time offscreen render at 720×480 with 4× MSAA measured **2.55% CPU**, averaging **27.2 fps** on the current M2 Max. This is an offscreen rendering measurement, not a long-duration live-window soak or a battery-life guarantee. The old static scene's 0.0% CPU result is not an animation-performance claim.
 

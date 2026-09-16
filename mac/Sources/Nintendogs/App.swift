@@ -121,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 var previous = ProcessInfo.processInfo.systemUptime
                 while !Task.isCancelled {
                     let active = self?.workspaceSleeping == false && self?.panel?.isVisible == true
-                    do { try await Task.sleep(for: .milliseconds(active ? 33 : 250)) } catch { break }
+                    do { try await Task.sleep(for: .milliseconds(active ? 100 : 250)) } catch { break }
                     guard let self else { break }
                     let uptime = ProcessInfo.processInfo.systemUptime
                     let delta = min(0.1, max(0, uptime - previous))
@@ -196,7 +196,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             }
             panel?.sceneHost.showCare(activity: behavior.state.activity, needs: needs)
         }
-        panel?.sceneHost.setAnimationActive(!workspaceSleeping && panel?.isVisible == true && animations?.isAnimating == true)
+        if let host = panel?.sceneHost, let animations {
+            host.setAnimationActive(rendererShouldRun(host: host, animations: animations))
+        }
     }
 
     /// Foreground animation time never includes hidden or system-sleep gaps.
@@ -251,7 +253,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                        careRequest: brain.state.careRequest != nil, suppressed: suppressed, hour: localHour)
         animations.update(deltaTime: dt)
         host.sceneTime = animations.sceneTime
-        host.setAnimationActive(animations.isAnimating)
+        host.setAnimationActive(rendererShouldRun(host: host, animations: animations))
+    }
+
+    /// A plain idle pose renders on demand. Everything with visible motion keeps SceneKit's
+    /// display link live; freezing only the baseline idle loop is what returns collapsed-tray
+    /// CPU to the plan's 0.0% budget without making fetch, wander, gaze, or reactions choppy.
+    private func rendererShouldRun(host: SceneHost, animations: AnimationController) -> Bool {
+        fetchSequence != nil
+            || previewing
+            || host.isWandering
+            || host.cursorAttention
+            || behavior?.isInteracting == true
+            || animations.currentClip != "shiba_idle_loop"
     }
 
     private func greet() {
@@ -361,6 +375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
         animations.update(deltaTime: dt)
         host.sceneTime = animations.sceneTime
+        host.updateAttachedBallTransform()
         host.setAnimationActive(animations.isAnimating)
         if sequence.phase == .done {
             finishFetch(sequence)
