@@ -43,6 +43,8 @@ public final class AmbientDirector {
 
     private enum GreetPhase: Equatable {
         case none
+        case pendingShake
+        case shaking
         case pendingAlert
         case alerting(resumeAt: TimeInterval)
     }
@@ -224,9 +226,9 @@ public final class AmbientDirector {
     /// standing alert), holds alert, then happy. Retries every tick until
     /// `AnimationController` can actually accept it instead of being lost if
     /// a logical route/interaction is still in flight.
-    public func greet() {
+    public func greet(morning: Bool = false) {
         guard greetPhase == .none else { return }
-        greetPhase = .pendingAlert
+        greetPhase = morning ? .pendingShake : .pendingAlert
     }
 
     // MARK: - Idle/sit flourish pools
@@ -390,6 +392,14 @@ public final class AmbientDirector {
         switch greetPhase {
         case .none:
             return
+        case .pendingShake:
+            guard controller.triggerReaction("shiba_shake", thenReturnToRest: false) else { return }
+            greetGeneration = controller.requestGeneration
+            greetPhase = .shaking
+        case .shaking:
+            guard controller.requestGeneration == greetGeneration else { greetPhase = .none; return }
+            guard controller.isReadyForAmbient else { return }
+            greetPhase = .pendingAlert
         case .pendingAlert:
             // Retries every tick — never lost if a logical route/interaction
             // is still in flight when `greet()` was called.

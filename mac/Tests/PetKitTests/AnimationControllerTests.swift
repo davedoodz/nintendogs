@@ -1,0 +1,44 @@
+import Testing
+import SceneKit
+@testable import PetKit
+
+@MainActor
+private func controllerForShiba() throws -> AnimationController {
+    let url = try #require(AssetLocator.shibaModel())
+    let model = try ModelLoader.load(url, targetHeight: 1)
+    return try AnimationController(root: model.node)
+}
+
+@Test @MainActor func repeatedSleepRequestsDoNotRestartThePostureRoute() throws {
+    let controller = try controllerForShiba()
+    for _ in 0..<240 {
+        controller.play(.sleep)
+        controller.update(deltaTime: 1.0 / 30)
+    }
+    #expect(controller.currentClip == "shiba_sleep_loop")
+}
+
+@Test @MainActor func cancelledWalkDoesNotResumeAfterStandingUp() throws {
+    let controller = try controllerForShiba()
+    controller.play(.idle, careRequest: true)
+    for _ in 0..<120 { controller.update(deltaTime: 1.0 / 30) }
+    #expect(controller.startLocomotion(.walk))
+    controller.update(deltaTime: 0.2)
+    controller.endLocomotion()
+    for _ in 0..<150 {
+        controller.update(deltaTime: 1.0 / 30)
+        #expect(controller.currentClip != "shiba_walk_loop")
+    }
+    #expect(controller.currentClip == "shiba_beg_loop")
+}
+
+@Test @MainActor func playStaysAnimatedUntilCareStateChanges() throws {
+    let controller = try controllerForShiba()
+    controller.play(.play)
+    for _ in 0..<300 { controller.update(deltaTime: 1.0 / 30) }
+    #expect(controller.currentClip == "shiba_happy")
+    #expect(controller.isAnimating)
+    controller.play(.eat)
+    for _ in 0..<120 { controller.update(deltaTime: 1.0 / 30) }
+    #expect(controller.currentClip == "shiba_eat_loop")
+}

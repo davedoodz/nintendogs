@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var localHour = Calendar.current.component(.hour, from: Date())
     private var workspaceSleeping = false
     private var lastGreeting = -Double.infinity
+    private var morningGreetingDay: Date?
 
     private func observePresence() {
         let center = NSWorkspace.shared.notificationCenter
@@ -89,13 +90,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             panel.sceneHost.onPlay = { [weak self] in self?.interact(.play) }
             observePresence()
             refresh()
+            if (7..<11).contains(localHour) { greet() }
             panel.orderFrontRegardless()
             lastTick = now
             lastSave = now
             loop = Task { [weak self] in
                 var previous = ProcessInfo.processInfo.systemUptime
                 while !Task.isCancelled {
-                    do { try await Task.sleep(for: .milliseconds(33)) } catch { break }
+                    let active = self?.workspaceSleeping == false && self?.panel?.isVisible == true
+                    do { try await Task.sleep(for: .milliseconds(active ? 33 : 250)) } catch { break }
                     guard let self else { break }
                     let uptime = ProcessInfo.processInfo.systemUptime
                     let delta = min(0.1, max(0, uptime - previous))
@@ -217,11 +220,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     private func greet() {
         guard behavior != nil, !previewing else { return }
+        let now = Date()
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: now)
+        let morning = (7..<11).contains(calendar.component(.hour, from: now)) && morningGreetingDay != day
+        if morning {
+            morningGreetingDay = day
+            animations?.preferStretchOnNextWake()
+        }
         panel?.sceneHost.stopWander()
         animations?.endLocomotion()
-        behavior?.interact(.idle, at: Date())
+        behavior?.interact(.idle, at: now)
         refresh()
-        ambient?.greet()
+        ambient?.greet(morning: morning)
     }
 
     private func save() {
