@@ -13,12 +13,28 @@ import SceneKit
 /// Players are attached to their target nodes exactly once, at `init`, and
 /// are reused for the app's lifetime — `play`/`update` only toggle existing
 /// players, never create new ones.
+///
+/// Two playback lanes share this one step machine:
+/// - **Logical** (`play`): what `PetBehavior` says the pet is doing. Tracked
+///   by `currentActivity` and `requestedTarget`, the latter surviving a
+///   one-shot's visual fallback so repeated identical `play` calls (the
+///   per-second UI heartbeat) stay no-ops instead of restarting anything —
+///   see `play(_:careRequest:restart:)`.
+/// - **Ambient** (`triggerReaction`): scoped overlays (flourishes, cursor
+///   reactions, locomotion, the sleep "stir") that never touch
+///   `currentActivity`/`requestedTarget` and auto-revert to whatever the
+///   logical lane currently rests on. Any genuine logical `play` call
+///   preempts an ambient overlay immediately (`beginStep` always stops the
+///   previous players), and an ambient call rejects outright while a
+///   logical multi-step route is still in flight, so the two lanes can
+///   never corrupt each other's queue.
 @MainActor
 public final class AnimationController {
     public enum Error: Swift.Error, LocalizedError {
         case missingAssets([String])
         case clipValidationFailed(clip: String, missingNodes: [String])
         case unknownClip(String)
+        case missingPostureMetadata([String])
 
         public var errorDescription: String? {
             switch self {
@@ -28,8 +44,17 @@ public final class AnimationController {
                 "Clip \(clip) targets rig nodes not present in this model: \(missing.joined(separator: ", "))."
             case .unknownClip(let name):
                 "\(name) is not one of the preloaded base clips."
+            case .missingPostureMetadata(let names):
+                "No posture metadata for: \(names.joined(separator: ", "))."
             }
         }
+    }
+
+    /// A locomotion loop the parent can start/stop directly; SceneKit only
+    /// plays the in-place cycle here, root translation lives in `SceneHost`.
+    public enum Locomotion: String, Sendable {
+        case walk = "shiba_walk_loop"
+        case run = "shiba_run_loop"
     }
 
     /// One clip attached to the rig: every (node, player) pair that makes it up.
@@ -47,8 +72,22 @@ public final class AnimationController {
         let posture: Posture
     }
 
-    private enum Posture {
+    private enum Posture: Equatable {
         case standing, sitting, lying
+    }
+
+    /// A clip's required starting posture and the posture it leaves the rig
+    /// in. Every clip's channels encode all 28 joints — including constant
+    /// (unmoving) channels for joints it doesn't animate, per
+    /// `blender/CLIPS_RESULT.md` — so playing a clip blends the *whole* rig
+    /// to its authored pose, not just the joints it visibly moves. A clip is
+    /// only safe to play as-is from a posture matching `start`; anything
+    /// else needs `route(from:to:)` inserted first.
+    private struct PostureRange {
+        let start: Posture
+        let end: Posture
+        init(_ posture: Posture) { start = posture; end = posture }
+        init(start: Posture, end: Posture) { self.start = start; self.end = end }
     }
 
     private struct ActivityProfile {
@@ -58,7 +97,31 @@ public final class AnimationController {
         let fallback: PetActivity?
     }
 
+    /// The resolved logical target of the last accepted (non-redundant)
+    /// `play` call, independent of whatever a one-shot's fallback is
+    /// currently showing — see the type-level doc for why.
+    private struct RequestTarget: Equatable {
+        let mainClip: String
+        let posture: Posture
+    }
+
+    /// What happens once the active (non-repeating) step's queue drains.
+    private enum Completion {
+        case none
+        /// Existing `play`/`pet` style one-shot fallback: settles into
+        /// another activity's clip via `settleVisual`, `currentActivity`
+        /// unchanged.
+        case activity(PetActivity)
+        /// Ambient overlay finished: return to whatever clip currently
+        /// represents the logical resting state (`currentRestingClip`),
+        /// again without touching `currentActivity`.
+        case restingClip
+    }
+
     private static let fadeDuration: TimeInterval = 0.25
+    /// Per-clip cooldown/no-repeat bookkeeping and scheduling cadence belong
+    /// to `AmbientDirector`; this controller only guarantees a clip is safe
+    /// to play and returns to the right place afterward.
 
     /// The 24 authored clips, filenames under `mac/Assets/shiba/clips/` minus
     /// the `.dae` extension, in the order listed in
@@ -75,14 +138,55 @@ public final class AnimationController {
         "shiba_alert", "shiba_pet_react", "shiba_shake", "shiba_fetch_carry_loop",
     ]
 
+    /// Start/end posture for every authored clip, per `blender/CLIPS_RESULT.md`
+    /// and `docs/ANIMATION_CONTRACT.md` (not the aliveness plan's pool table,
+    /// which mis-listed `shiba_yawn` as sit-safe — the clip's authored entry
+    /// and exit is standing/idle only).
+    private static let posture: [String: PostureRange] = [
+        "shiba_idle_loop": PostureRange(.standing),
+        "shiba_sit": PostureRange(start: .standing, end: .sitting),
+        "shiba_sit_idle_loop": PostureRange(.sitting),
+        "shiba_lie_down": PostureRange(start: .sitting, end: .lying),
+        "shiba_sleep_loop": PostureRange(.lying),
+        "shiba_eat_loop": PostureRange(.standing),
+        "shiba_walk_loop": PostureRange(.standing),
+        "shiba_run_loop": PostureRange(.standing),
+        "shiba_bark": PostureRange(.standing),
+        "shiba_fetch_pickup": PostureRange(.standing),
+        "shiba_happy": PostureRange(.standing),
+        "shiba_stretch": PostureRange(start: .lying, end: .standing),
+        "shiba_stand_from_sit": PostureRange(start: .sitting, end: .standing),
+        "shiba_sit_from_lie": PostureRange(start: .lying, end: .sitting),
+        "shiba_wake": PostureRange(start: .lying, end: .sitting),
+        "shiba_beg_loop": PostureRange(.sitting),
+        "shiba_yawn": PostureRange(.standing),
+        "shiba_scratch": PostureRange(.sitting),
+        "shiba_look_around_loop": PostureRange(.standing),
+        "shiba_drink_loop": PostureRange(.standing),
+        "shiba_alert": PostureRange(.standing),
+        "shiba_pet_react": PostureRange(.standing),
+        "shiba_shake": PostureRange(.standing),
+        "shiba_fetch_carry_loop": PostureRange(.standing),
+    ]
+
     private let root: SCNNode
     private var clips: [String: Clip] = [:]
 
     private var currentActivity: PetActivity = .idle
     private var currentPosture: Posture = .standing
+    private var requestedTarget = RequestTarget(mainClip: "shiba_idle_loop", posture: .standing)
     private var pendingSteps: [Step] = []
-    private var pendingFallback: PetActivity?
+    private var pendingCompletion: Completion = .none
     private var isPreviewing = false
+
+    /// The ambient loop currently standing in for the logical activity's
+    /// default resting clip (e.g. `shiba_look_around_loop` instead of
+    /// `shiba_idle_loop`), set by `triggerReaction` when given a `_loop`
+    /// clip. Cleared on every genuine `play` transition.
+    private var restingVariantOverride: String?
+    /// Consumed once by the next lying→standing route; see
+    /// `preferStretchOnNextWake`.
+    private var preferStretchWake = false
 
     private var activeStep: Step?
     private var activeElapsed: TimeInterval = 0
@@ -90,6 +194,15 @@ public final class AnimationController {
 
     public private(set) var currentClip: String = ""
     public private(set) var isAnimating: Bool = false
+    /// A locomotion loop is currently the active ambient overlay; cleared by
+    /// `endLocomotion` or by any genuine `play` transition.
+    public private(set) var isLocomoting: Bool = false
+    /// Bumped every time a genuine (non-redundant) `play` call takes effect.
+    /// `AmbientDirector` snapshots this before starting a multi-tick ambient
+    /// sequence (the sleep stir, a greeting) and aborts that sequence if it
+    /// changes underneath it, instead of blindly issuing the sequence's next
+    /// step onto whatever the real activity transition already put on the rig.
+    public private(set) var requestGeneration: Int = 0
     /// Accumulated animation clock, owned here so playback is driven off a
     /// single deterministic source instead of wall time. The caller mirrors
     /// this into `SCNSceneRenderer.sceneTime` (live `SCNView` or a headless
@@ -103,6 +216,9 @@ public final class AnimationController {
     /// resolve against `root`, or `init` throws and nothing was attached.
     public init(root: SCNNode) throws {
         self.root = root
+
+        let missingPosture = Self.clipNames.filter { Self.posture[$0] == nil }
+        guard missingPosture.isEmpty else { throw Error.missingPostureMetadata(missingPosture) }
 
         var parsed: [String: LoadedClip] = [:]
         var missingFiles: [String] = []
@@ -160,16 +276,36 @@ public final class AnimationController {
     /// Requests an activity. An unmet care request changes the ordinary idle
     /// visual to the authored begging loop without inventing a second logical
     /// behavior state.
-    public func play(_ activity: PetActivity, careRequest: Bool = false) {
+    ///
+    /// Idempotent by default: calling this again with the same
+    /// `activity`/`careRequest` (the per-second UI heartbeat that mirrors
+    /// `PetBehavior.state`) is a no-op regardless of whether a multi-step
+    /// route is still in flight or a one-shot has already visually settled
+    /// into its fallback — neither gets restarted. Pass `restart: true` for a
+    /// genuine new user action that happens to name the same activity (e.g. a
+    /// second stroke while `.pet`'s reaction is still settling), which always
+    /// takes effect and replays the reaction from the top.
+    public func play(_ activity: PetActivity, careRequest: Bool = false, restart: Bool = false) {
         let profile = Self.profile(for: activity, careRequest: careRequest)
-        let isAlreadyShowingRequestedVisual = currentClip == profile.mainClip
-        guard activity != currentActivity || isPreviewing || isAlreadyShowingRequestedVisual == false else { return }
+        let target = RequestTarget(mainClip: profile.mainClip, posture: profile.posture)
+        let isRedundantHeartbeat = !restart && !isPreviewing && currentActivity == activity && requestedTarget == target
+        guard !isRedundantHeartbeat else { return }
         isPreviewing = false
+        requestedTarget = target
         currentActivity = activity
-        var steps = Self.route(from: currentPosture, to: profile.posture)
+        isLocomoting = false
+        restingVariantOverride = nil
+        requestGeneration += 1
+
+        let useStretch = consumeStretchPreference()
+        var steps = Self.route(from: currentPosture, to: profile.posture, useStretch: useStretch)
         steps.append(Step(clip: profile.mainClip, posture: profile.posture))
         pendingSteps = steps
-        pendingFallback = profile.fallback
+        if let fallback = profile.fallback {
+            pendingCompletion = .activity(fallback)
+        } else {
+            pendingCompletion = .none
+        }
         beginStep(pendingSteps.removeFirst())
     }
 
@@ -186,21 +322,111 @@ public final class AnimationController {
             throw Error.unknownClip(name)
         }
         pendingSteps = []
-        pendingFallback = nil
+        pendingCompletion = .none
         isPreviewing = true
         beginStep(Step(clip: name, posture: currentPosture))
         return clip.duration
+    }
+
+    /// Plays a single named clip as a **scoped ambient overlay**: never
+    /// changes `currentActivity`/`requestedTarget`, auto-routes around a
+    /// posture mismatch (e.g. `shiba_bark` — authored standing — played
+    /// while begging, which is seated: stands, barks, sits back down), and
+    /// either becomes the new resting loop (`clipName` is a `_loop` clip —
+    /// this is how the idle/look-around base-loop swap and locomotion work)
+    /// or, for a one-shot, reverts to the current resting clip when it
+    /// finishes (`thenReturnToRest`, default `true`; pass `false` to hold on
+    /// the clip's final frame instead, e.g. the sleep stir's own multi-step
+    /// sequencing, which drives the follow-up itself).
+    ///
+    /// Rejects (returns `false`, no side effect) while previewing or while a
+    /// logical multi-step route is still in flight, so an ambient caller can
+    /// never corrupt the logical queue — callers should simply skip the tick.
+    /// Uses only the players attached at `init`; never allocates a new one.
+    @discardableResult
+    public func triggerReaction(_ clipName: String, thenReturnToRest: Bool = true) -> Bool {
+        guard isReadyForAmbient else { return false }
+        guard let clip = clips[clipName], let range = Self.posture[clipName] else { return false }
+
+        var steps: [Step] = []
+        if range.start != currentPosture {
+            steps += Self.route(from: currentPosture, to: range.start, useStretch: false)
+        }
+        steps.append(Step(clip: clipName, posture: range.end))
+
+        if clip.repeats {
+            // Becomes the new resting visual; nothing to return to.
+            restingVariantOverride = clipName
+            pendingCompletion = .none
+        } else if thenReturnToRest {
+            let restClip = currentRestingClip()
+            if let restRange = Self.posture[restClip], range.end != restRange.start {
+                steps += Self.route(from: range.end, to: restRange.start, useStretch: false)
+            }
+            pendingCompletion = .restingClip
+        } else {
+            pendingCompletion = .none
+        }
+
+        pendingSteps = steps
+        beginStep(pendingSteps.removeFirst())
+        return true
+    }
+
+    public var isReadyForAmbient: Bool {
+        guard !isPreviewing, pendingSteps.isEmpty, let step = activeStep, let clip = clips[step.clip] else { return false }
+        return clip.repeats || !isAnimating
+    }
+
+    /// Starts a scoped locomotion loop (auto-routing to standing first if
+    /// needed, e.g. up from a seated care request). The parent/`SceneHost`
+    /// should wait for `currentClip` to actually equal `gait.rawValue` before
+    /// translating the root — this call may still be mid route-out.
+    @discardableResult
+    public func startLocomotion(_ gait: Locomotion) -> Bool {
+        guard currentPosture == requestedTarget.posture else { return false }
+        guard triggerReaction(gait.rawValue, thenReturnToRest: false) else { return false }
+        isLocomoting = true
+        return true
+    }
+
+    /// Ends locomotion and returns to the current logical resting clip,
+    /// routing there if the gait left the rig in a different posture (e.g.
+    /// a walk started from a seated care request lands back on `standing`;
+    /// this routes back to seated before resuming `shiba_beg_loop`).
+    /// No-op if locomotion isn't active.
+    public func endLocomotion() {
+        guard isLocomoting else { return }
+        isLocomoting = false
+        restingVariantOverride = nil
+        guard !isPreviewing else { return }
+        pendingSteps.removeAll(keepingCapacity: true)
+        settleToRestingClip()
+    }
+
+    /// The authored duration of a preloaded clip, for callers (the ambient
+    /// director) that need to schedule a follow-up after it plays out.
+    public func duration(ofClip name: String) -> TimeInterval? {
+        clips[name]?.duration
+    }
+
+    /// Makes the next lying→standing route (i.e. the next time waking up
+    /// actually reaches standing) use `shiba_stretch` in one hop instead of
+    /// `shiba_wake` + `shiba_stand_from_sit`. Consumed (reset) by that next
+    /// route computation regardless of which posture pair it turns out to
+    /// be, so a stale preference never leaks into an unrelated transition.
+    public func preferStretchOnNextWake() {
+        preferStretchWake = true
     }
 
     /// Advances the active step by `deltaTime` of simulated/animation time,
     /// and mirrors that into `sceneTime` (read this back into the renderer's
     /// `SCNSceneRenderer.sceneTime` every call). Looping steps never advance
     /// on their own. A finished one-shot step either starts the next queued
-    /// step, visually settles into a fallback activity's clip (`play`/`pet`
-    /// settle into idle's clip once their one-shot finishes, without
-    /// changing `currentActivity` — see `settleVisual`), or — with nothing
-    /// queued and no fallback — holds its final pose (`fillsForward`) with
-    /// `isAnimating` cleared.
+    /// step, visually settles into a fallback activity's clip or the ambient
+    /// resting clip (`currentActivity`/`requestedTarget` unchanged either
+    /// way — see `settleVisual`), or — with nothing queued and no completion
+    /// — holds its final pose (`fillsForward`) with `isAnimating` cleared.
     public func update(deltaTime: TimeInterval) {
         guard deltaTime > 0 else { return }
         sceneTime += deltaTime
@@ -211,16 +437,17 @@ public final class AnimationController {
 
         if !pendingSteps.isEmpty {
             beginStep(pendingSteps.removeFirst())
-        } else if let fallback = pendingFallback {
-            // Visual settle only: keep `currentActivity` as whatever was
-            // actually requested (e.g. `.play`/`.pet`) so the care loop's
-            // repeated same-activity `play()` calls stay no-ops instead of
-            // re-triggering the one-shot on every tick for the rest of the
-            // interaction's duration.
-            pendingFallback = nil
-            settleVisual(into: fallback)
-        } else {
+            return
+        }
+        switch pendingCompletion {
+        case .none:
             isAnimating = false
+        case .activity(let fallback):
+            pendingCompletion = .none
+            settleVisual(into: fallback)
+        case .restingClip:
+            pendingCompletion = .none
+            settleToRestingClip()
         }
     }
 
@@ -254,7 +481,39 @@ public final class AnimationController {
     /// fallback without disturbing the logically-requested activity.
     private func settleVisual(into activity: PetActivity) {
         let profile = Self.profile(for: activity, careRequest: false)
+        pendingCompletion = profile.fallback.map(Completion.activity) ?? .none
         beginStep(Step(clip: profile.mainClip, posture: profile.posture))
+    }
+
+    /// What the logical lane currently rests on: the last accepted request's
+    /// main clip, or the ambient override standing in for it (only while
+    /// that override shares the same posture family, so a stale override
+    /// from a different activity can never leak in).
+    private func currentRestingClip() -> String {
+        guard let variant = restingVariantOverride, let variantRange = Self.posture[variant],
+              variantRange.start == requestedTarget.posture else {
+            return requestedTarget.mainClip
+        }
+        return variant
+    }
+
+    /// Routes from wherever the rig actually is back to the resting clip's
+    /// posture (a no-op route if it's already there) and plays it. Used both
+    /// when an ambient one-shot's queue drains and by `endLocomotion`, so
+    /// ending a scoped overlay from an unexpected posture never jump-cuts.
+    private func settleToRestingClip() {
+        let clip = currentRestingClip()
+        guard let range = Self.posture[clip] else { return }
+        var steps = Self.route(from: currentPosture, to: range.start, useStretch: false)
+        steps.append(Step(clip: clip, posture: range.start))
+        pendingCompletion = .none
+        pendingSteps = steps
+        beginStep(pendingSteps.removeFirst())
+    }
+
+    private func consumeStretchPreference() -> Bool {
+        defer { preferStretchWake = false }
+        return preferStretchWake
     }
 
     /// The posture reached at the end of an activity, and the clip that
@@ -262,7 +521,8 @@ public final class AnimationController {
     private static func profile(for activity: PetActivity, careRequest: Bool = false) -> ActivityProfile {
         switch activity {
         case .idle where careRequest:
-            ActivityProfile(posture: .standing, mainClip: "shiba_beg_loop", fallback: nil)
+            // Authored seated (`docs/ANIMATION_CONTRACT.md`), not standing.
+            ActivityProfile(posture: .sitting, mainClip: "shiba_beg_loop", fallback: nil)
         case .idle:
             ActivityProfile(posture: .standing, mainClip: "shiba_idle_loop", fallback: nil)
         case .sit, .call:
@@ -275,8 +535,13 @@ public final class AnimationController {
         case .drink:
             ActivityProfile(posture: .standing, mainClip: "shiba_drink_loop", fallback: nil)
         case .play:
-            // Momentary: play the happy one-shot, then fall back to idle.
-            ActivityProfile(posture: .standing, mainClip: "shiba_happy", fallback: .idle)
+            // Momentary but held for the interaction's real (longer) duration:
+            // replays the happy one-shot on itself instead of falling quiet
+            // into idle after its first ~2.5s, so the whole play session
+            // stays visibly happy. The per-second UI heartbeat's repeated
+            // `play(.play)` calls are already no-ops (`requestedTarget`
+            // unchanged), so this only ever restarts via this self-fallback.
+            ActivityProfile(posture: .standing, mainClip: "shiba_happy", fallback: .play)
         case .pet:
             // Momentary: the pet-specific reaction, then fall back to idle.
             ActivityProfile(posture: .standing, mainClip: "shiba_pet_react", fallback: .idle)
@@ -288,8 +553,10 @@ public final class AnimationController {
     /// sleep` route, and its tier-2 reverse: waking chains `shiba_wake`
     /// (lying -> sitting) with `shiba_stand_from_sit` (sitting -> standing)
     /// for a full lie-to-stand, matching how each clip's own documented
-    /// start/end pose chains to the next.
-    private static func route(from: Posture, to: Posture) -> [Step] {
+    /// start/end pose chains to the next. `useStretch` swaps that lie-to-stand
+    /// pair for the single-clip `shiba_stretch` route instead (both valid per
+    /// the contract); ignored for every other posture pair.
+    private static func route(from: Posture, to: Posture, useStretch: Bool = false) -> [Step] {
         switch (from, to) {
         case (.standing, .standing), (.sitting, .sitting), (.lying, .lying):
             []
@@ -304,6 +571,8 @@ public final class AnimationController {
             [Step(clip: "shiba_stand_from_sit", posture: .standing)]
         case (.sitting, .lying):
             [Step(clip: "shiba_lie_down", posture: .lying)]
+        case (.lying, .standing) where useStretch:
+            [Step(clip: "shiba_stretch", posture: .standing)]
         case (.lying, .standing):
             [
                 Step(clip: "shiba_wake", posture: .sitting),

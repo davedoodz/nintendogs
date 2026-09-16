@@ -24,6 +24,7 @@ final class PetPanel: NSPanel {
         isReleasedWhenClosed = false
         minSize = NSSize(width: 360, height: 240)
         maxSize = NSSize(width: 1080, height: 720)
+        contentAspectRatio = NSSize(width: 3, height: 2)
         setFrameUsingName("PetPanel")
         setFrameAutosaveName("PetPanel")
         contentView = sceneHost

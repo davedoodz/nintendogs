@@ -12,6 +12,7 @@ struct StatusMenu: View {
         Text("Hunger: \(Int(delegate.needs.hunger))% · Thirst: \(Int(delegate.needs.thirst))%")
         Text("Energy: \(Int(delegate.needs.energy))% · Fun: \(Int(delegate.needs.fun))%")
         Text("Cleanliness: \(Int(delegate.needs.cleanliness))% · Affection: \(Int(delegate.needs.affection))%")
+        Text("Hover to say hello · Stroke to pet · Double-click to play")
         Divider()
         Button("Give food") { delegate.interact(.eat) }
         Button("Give water") { delegate.interact(.drink) }
@@ -20,10 +21,19 @@ struct StatusMenu: View {
         Button("Call / wake") { delegate.interact(.call) }
         Button("Rest") { delegate.interact(.sleep) }
         Button("Resume autonomous behavior") { delegate.interact(.idle) }
-        Menu("Preview animations") {
+        Menu("Personality") {
+            Toggle("Explore the panel", isOn: $delegate.wanderEnabled)
+            Picker("Activity", selection: $delegate.ambientFrequency) {
+                Text("Calm").tag(0.65)
+                Text("Natural").tag(1.0)
+                Text("Lively").tag(1.5)
+            }
+        }
+        Menu("Animation diagnostics") {
             ForEach(AnimationController.clipNames, id: \.self) { clip in
                 Button(clip.replacingOccurrences(of: "shiba_", with: "")) { delegate.preview(clip) }
             }
+            Button("Return to autonomous behavior") { delegate.interact(.idle) }
         }
         Divider()
         Button("Show / hide pet") { delegate.togglePanel() }

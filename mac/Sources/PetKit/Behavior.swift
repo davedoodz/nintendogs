@@ -34,6 +34,12 @@ public struct PetBehavior: Sendable {
     /// a relaunch — see `init(state:)`.
     private var interactionEndsAt: Date?
     private var manualRestUntil: Date?
+    private var awakeUntil: Date?
+
+    public var isInteracting: Bool { interactionEndsAt != nil }
+    public var isRestingOnRequest: Bool {
+        manualRestUntil.map { state.lastUpdated < $0 } ?? false
+    }
 
     private static let maxCatchUp: TimeInterval = 12 * 3600
     private static let stepSize: TimeInterval = 1
@@ -78,6 +84,7 @@ public struct PetBehavior: Sendable {
             normalized.activity = .idle
         }
         normalized.needs.clamp()
+        normalized.lastInteractionAt = normalized.lastInteractionAt ?? normalized.lastUpdated
         self.state = normalized
         self.interactionEndsAt = nil
     }
@@ -106,6 +113,8 @@ public struct PetBehavior: Sendable {
         guard date >= state.lastUpdated else { return }
         tick(at: date, calendar: .current)
         manualRestUntil = activity == .sleep ? date.addingTimeInterval(15 * 60) : nil
+        state.lastInteractionAt = date
+        awakeUntil = activity == .sleep ? nil : date.addingTimeInterval(60)
         state.activity = activity
         interactionEndsAt = Self.duration(for: activity).map { date.addingTimeInterval($0) }
     }
@@ -118,24 +127,48 @@ public struct PetBehavior: Sendable {
             if cursor >= endsAt {
                 interactionEndsAt = nil
                 let night = Self.isNight(cursor, calendar: calendar)
-                state.activity = Self.resolveAutonomousActivity(needs: state.needs, previous: state.activity, night: night)
+                state.activity = autonomousActivity(at: cursor, night: night)
                 applyAutonomous(state.activity, dt: dt - interactionTime)
             }
         } else {
             let night = Self.isNight(cursor, calendar: calendar)
             state.activity = (manualRestUntil.map { cursor < $0 } ?? false)
                 ? .sleep
-                : Self.resolveAutonomousActivity(needs: state.needs, previous: state.activity, night: night)
+                : autonomousActivity(at: cursor, night: night)
             applyAutonomous(state.activity, dt: dt)
         }
         state.needs.clamp()
+    }
+
+    /// Attention counts as presence, not a meal or a full play interaction.
+    public mutating func noticeAttention(at date: Date, seconds: TimeInterval) {
+        guard date >= state.lastUpdated, seconds > 0, seconds.isFinite else { return }
+        tick(at: date)
+        guard state.activity != .sleep else { return }
+        state.lastInteractionAt = date
+        state.needs.affection = min(100, state.needs.affection + min(seconds, 1) / 10)
+    }
+
+    private func autonomousActivity(at date: Date, night: Bool) -> PetActivity {
+        if awakeUntil.map({ date < $0 }) == true { return .idle }
+        let needs = state.needs
+        let critical = needs.hunger >= Self.criticalDeficit || needs.thirst >= Self.criticalDeficit
+        let alone = max(0, date.timeIntervalSince(state.lastInteractionAt ?? state.lastUpdated))
+        // An unattended daytime pet settles, naps, then gets up again.
+        // Repeating the presence rhythm avoids sleeping forever at full energy.
+        if !night, !critical, alone >= 20 * 60 {
+            let phase = alone.truncatingRemainder(dividingBy: 45 * 60)
+            if phase >= 25 * 60 { return .sleep }
+            if phase >= 20 * 60 { return .sit }
+        }
+        return Self.resolveAutonomousActivity(needs: needs, previous: state.activity, night: night)
     }
 
     // MARK: - Autonomous selection (utility-based: idle/sit/sleep)
 
     private static func resolveAutonomousActivity(needs: PetNeeds, previous: PetActivity, night: Bool) -> PetActivity {
         let critical = needs.hunger >= criticalDeficit || needs.thirst >= criticalDeficit
-        let canSleep = needs.energy < 25 || (!critical && (night || (previous == .sleep && needs.energy < 60)))
+        let canSleep = !critical && (night || (previous == .sleep && needs.energy < 60))
         let sleepUtility: Double
         if canSleep {
             let desire = (night ? 110 : 100) - needs.energy

@@ -83,11 +83,14 @@ public struct PetState: Codable, Sendable, Equatable {
     public var needs: PetNeeds
     public var activity: PetActivity
     public var lastUpdated: Date
+    /// Optional for decoding saves written before presence-aware naps existed.
+    public var lastInteractionAt: Date?
 
-    public init(needs: PetNeeds = PetNeeds(), activity: PetActivity = .idle, lastUpdated: Date = Date()) {
+    public init(needs: PetNeeds = PetNeeds(), activity: PetActivity = .idle, lastUpdated: Date = Date(), lastInteractionAt: Date? = nil) {
         self.needs = needs
         self.activity = activity
         self.lastUpdated = lastUpdated
+        self.lastInteractionAt = lastInteractionAt ?? lastUpdated
     }
 
     /// A short status hint for chrome (menu bar, panel) when the pet wants care

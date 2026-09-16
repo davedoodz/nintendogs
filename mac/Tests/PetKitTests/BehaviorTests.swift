@@ -185,3 +185,40 @@ private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: 
         #expect(PetNeeds.bounds.contains(value))
     }
 }
+
+@Test func unattendedDaytimePetSettlesNapsAndWakesForCare() {
+    let start = date(2026, 1, 1, 12)
+    var pet = PetBehavior(state: PetState(lastUpdated: start))
+    pet.tick(at: start.addingTimeInterval(21 * 60), calendar: utc)
+    #expect(pet.state.activity == .sit)
+    pet.tick(at: start.addingTimeInterval(26 * 60), calendar: utc)
+    #expect(pet.state.activity == .sleep)
+    let returned = start.addingTimeInterval(27 * 60)
+    pet.interact(.call, at: returned)
+    pet.tick(at: returned.addingTimeInterval(3), calendar: utc)
+    #expect(pet.state.activity == .idle)
+    #expect(pet.state.lastInteractionAt == returned)
+}
+
+@Test func legacySaveGainsPresenceHistoryWithoutLosingNeeds() throws {
+    let original = PetState(needs: PetNeeds(hunger: 42), lastUpdated: date(2026, 1, 1, 12))
+    let encoded = try JSONEncoder().encode(original)
+    var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    object.removeValue(forKey: "lastInteractionAt")
+    let legacy = try JSONDecoder().decode(PetState.self, from: JSONSerialization.data(withJSONObject: object))
+    let pet = PetBehavior(state: legacy)
+    #expect(pet.state.needs.hunger == 42)
+    #expect(pet.state.lastInteractionAt == original.lastUpdated)
+}
+
+@Test func hoverAttentionDoesNotCancelMealsOrRestoreHunger() {
+    let start = date(2026, 1, 1, 12)
+    var pet = PetBehavior(state: PetState(needs: PetNeeds(hunger: 70, affection: 50), lastUpdated: start))
+    pet.noticeAttention(at: start, seconds: 100)
+    #expect(pet.state.needs.hunger == 70)
+    #expect(pet.state.needs.affection <= 50.1)
+    pet.interact(.eat, at: start)
+    pet.noticeAttention(at: start.addingTimeInterval(1), seconds: 1)
+    #expect(pet.state.activity == .eat)
+    #expect(pet.isInteracting)
+}
