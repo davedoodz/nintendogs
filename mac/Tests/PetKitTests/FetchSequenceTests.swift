@@ -61,7 +61,7 @@ private func run(
     #expect((offset.x * offset.x + offset.y * offset.y).squareRoot() <= FetchSequence.pickupRadius + 1e-6)
 }
 
-@Test func theBallIsCarriedToTheLatestReturnTargetAndDroppedInFrontOfTheDog() {
+@Test func theBallIsCarriedToTheLatestReturnTargetAndPresentedToTheViewer() {
     var sequence = FetchSequence(
         home: SIMD2(0, 0), ball: SIMD2(0, -3), returnTo: SIMD2(0, 0), clipDurations: clips
     )
@@ -78,9 +78,11 @@ private func run(
     #expect((miss.x * miss.x + miss.y * miss.y).squareRoot() <= FetchSequence.arrivalRadius + 1e-6)
     #expect(!sequence.ballAttached, "the ball is on the ground from the drop onward")
 
-    let ahead = sequence.ballPosition - sequence.position
-    let distance = (ahead.x * ahead.x + ahead.y * ahead.y).squareRoot()
-    #expect(abs(distance - 0.35) < 1e-9, "the ball lands ahead of the muzzle, not on the paws")
+    // Toward the camera rather than along the carry heading, so an off-centre cursor cannot
+    // fling the ball past the panel edge.
+    let offset = sequence.ballPosition - sequence.position
+    #expect(abs(offset.x) < 1e-9)
+    #expect(abs(offset.y - 0.35) < 1e-9, "the ball is presented between the dog and you")
 
     // Once dropped, the ball stops tracking a moving cursor.
     let restingBall = sequence.ballPosition

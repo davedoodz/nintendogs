@@ -48,9 +48,11 @@ public struct FetchSequence: Sendable, Equatable {
     /// Fixed integration step.
     static let step: TimeInterval = 1.0 / 120
 
-    /// Where the ball lands relative to the dog once dropped: ahead of the muzzle, not
-    /// stacked on its feet.
-    private static let dropDistance: Double = 0.35
+    /// How far toward the camera the ball is set down once carried back: presented in front
+    /// of the dog rather than stacked on its paws. Public because the caller must leave this
+    /// much depth headroom when it clamps the return target, or the presented ball ends up
+    /// past the near edge of the visible ground.
+    public static let dropDistance: Double = 0.35
 
     private let clipDurations: ClipDurations
 
@@ -130,7 +132,7 @@ public struct FetchSequence: Sendable, Equatable {
         switch phase {
         case .chase, .watch, .pickup: ball
         case .turnHome, .carry: position
-        case .drop, .celebrate, .done: dropPoint ?? forwardPoint(Self.dropDistance)
+        case .drop, .celebrate, .done: dropPoint ?? position + SIMD2(0, Self.dropDistance)
         }
     }
 
@@ -190,7 +192,11 @@ public struct FetchSequence: Sendable, Equatable {
             if travel(toward: returnTarget, speed: Self.carrySpeed, dt: dt) {
                 phase = .drop
                 phaseElapsed = 0
-                dropPoint = forwardPoint(Self.dropDistance)
+                // Toward the camera, not along the carry heading: the dog arrives facing
+                // wherever your cursor was, so a forward drop can push the ball off the
+                // panel edge. `+z` puts it between the dog and you, which is also the way
+                // `celebrate` turns (R10).
+                dropPoint = position + SIMD2(0, Self.dropDistance)
             }
         case .drop:
             if phaseElapsed >= Self.dropDuration {
