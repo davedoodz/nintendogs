@@ -48,6 +48,8 @@ skl_root
 
 SceneKit matches animation channels to nodes by name. Rename a bone, the clip silently does nothing.
 
+**Rigid skinning.** Every vertex is bound to exactly one joint (DS rigs have no weight blending), so a joint that meets the body — `tail1`, `neck`, `Lleg1`/`Rleg1`, `Larm1`/`Rarm1` — opens a visible seam when rotated far from rest. Keep those under ~10° and put the range in the next joint down the chain (`tail2`/`tail3`, `head`, `*2`/`*foot`/`*hand`). The first tail-wag test rotated `tail1` ±20° on a pitch axis and showed the seam under the tail root; a wag is a horizontal sweep.
+
 ## Toolchain
 
 - **Blender 4.2 LTS** on Windows. 5.x removed Collada import; 4.2 has both import and export. Keep 5.x for nothing here.
