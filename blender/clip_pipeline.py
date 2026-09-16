@@ -121,14 +121,20 @@ class Rig:
         self.arm.pose.bones["skl_root"].location = self.rest["skl_root"].to_3x3().inverted() @ Vector(pose.get("root_location", (0, 0, 0)))
         bpy.context.view_layer.update()
 
-    def action(self, name, frames, pose_function, keyed_bones=None):
+    def action(self, name, frames, pose_function, keyed_bones=None, floor_contact=False):
         self.arm.animation_data_create()
         action = bpy.data.actions.new(name)
         self.arm.animation_data.action = action
         self.scene.frame_start, self.scene.frame_end = 1, frames
         self.set_pose({})
+        up = self.arm.matrix_world.to_3x3() @ Vector((0, 1, 0))
+        floor = min(v.dot(up) for v in self.rest_points)
         for frame in range(1, frames + 1):
             self.set_pose(pose_function((frame - 1) / (frames - 1)))
+            if floor_contact:
+                correction = max(0, floor - min(v.dot(up) for v in positions(self.mesh)))
+                self.arm.pose.bones["skl_root"].location += self.rest["skl_root"].to_3x3().inverted() @ Vector((0, correction, 0))
+                bpy.context.view_layer.update()
             for joint in list(keyed_bones or self.nodes):
                 bone = self.arm.pose.bones[joint]
                 bone.keyframe_insert("rotation_quaternion", frame=frame, group=joint)

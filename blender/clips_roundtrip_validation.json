@@ -1,0 +1,62 @@
+{
+  "shiba_bark": {
+    "minimum_world_height": -0.0015789568424224854,
+    "max_joint_step_degrees": 5.2388558386900375,
+    "fresh_dae_max_vertex_error": 1.4745374771181974e-06
+  },
+  "shiba_eat_loop": {
+    "minimum_world_height": -0.0015789568424224854,
+    "max_joint_step_degrees": 1.6883658801579706,
+    "fresh_dae_max_vertex_error": 1.284009809763289e-06
+  },
+  "shiba_fetch_pickup": {
+    "minimum_world_height": -0.0015789568424224854,
+    "max_joint_step_degrees": 5.969961848769142,
+    "fresh_dae_max_vertex_error": 1.4901161193847656e-06
+  },
+  "shiba_happy": {
+    "minimum_world_height": -0.0015789568424224854,
+    "max_joint_step_degrees": 7.980937733829207,
+    "fresh_dae_max_vertex_error": 1.5542989743239043e-06
+  },
+  "shiba_idle_loop": {
+    "minimum_world_height": -0.0015789568424224854,
+    "max_joint_step_degrees": 2.6182106515688757,
+    "fresh_dae_max_vertex_error": 1.7520115919946514e-06
+  },
+  "shiba_lie_down": {
+    "minimum_world_height": -0.001579170930199325,
+    "max_joint_step_degrees": 2.919834580080989,
+    "fresh_dae_max_vertex_error": 1.7532785034278307e-06
+  },
+  "shiba_run_loop": {
+    "minimum_world_height": 0.02342088334262371,
+    "max_joint_step_degrees": 18.75240218703319,
+    "fresh_dae_max_vertex_error": 1.5222540842440288e-06
+  },
+  "shiba_sit": {
+    "minimum_world_height": -0.0015793540515005589,
+    "max_joint_step_degrees": 5.672145537275899,
+    "fresh_dae_max_vertex_error": 1.966106438405579e-06
+  },
+  "shiba_sit_idle_loop": {
+    "minimum_world_height": -0.00157878955360502,
+    "max_joint_step_degrees": 1.8070465001241716,
+    "fresh_dae_max_vertex_error": 1.6861373376626534e-06
+  },
+  "shiba_sleep_loop": {
+    "minimum_world_height": -0.0015787859447300434,
+    "max_joint_step_degrees": 0,
+    "fresh_dae_max_vertex_error": 1.5079651186407615e-06
+  },
+  "shiba_stretch": {
+    "minimum_world_height": -0.0015793264610692859,
+    "max_joint_step_degrees": 4.503717028792865,
+    "fresh_dae_max_vertex_error": 1.8352036855626884e-06
+  },
+  "shiba_walk_loop": {
+    "minimum_world_height": 0.023420892655849457,
+    "max_joint_step_degrees": 10.294309999107831,
+    "fresh_dae_max_vertex_error": 1.5497207641601562e-06
+  }
+}
