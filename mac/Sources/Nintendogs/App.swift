@@ -4,6 +4,8 @@ import Darwin
 
 private let expressionTailOwnedClips: Set<String> = [
     "shiba_happy", "shiba_pet_react", "shiba_fetch_pickup",
+    "shiba_pet_settle", "shiba_lie_side_loop", "shiba_belly_loop", "shiba_lie_side_up",
+    "shiba_call_stun", "shiba_call_curious",
 ]
 
 @main
@@ -19,6 +21,20 @@ struct NintendogsApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    private enum CallPhase: Equatable {
+        case orienting
+        case approaching
+        case pawsUp
+        case pawsDown
+    }
+
+    private enum PettingPhase: Equatable {
+        case head
+        case settling
+        case side
+        case belly
+        case rising
+    }
     private(set) var panel: PetPanel?
     private var notchTray: NotchTrayPanel?
     private let heldItems = HeldItemSession()
@@ -43,6 +59,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var workspaceSleeping = false
     private var lastGreeting = -Double.infinity
     private var morningGreetingDay: Date?
+    private var callPhase: CallPhase?
+    private var callPawsLoopTime: TimeInterval = 0
+    private var pettingPhase: PettingPhase?
+    private var pettingStartedAt = -Double.infinity
+    private var lastPetStrokeAt = -Double.infinity
+    private var recentPetStrokes: [TimeInterval] = []
     private var fetchSequence: FetchSequence?
     private var fetchPhase: FetchSequence.Phase?
     /// A thrown ball is still moving; the flight owns the ball's transform until it rests.
@@ -191,16 +213,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         ambient?.setAttention(false)
         panel?.sceneHost.stopWander()
         behavior?.interact(activity, at: Date())
-        if let behavior {
-            animations?.play(behavior.state.activity, careRequest: behavior.state.careRequest != nil, restart: true)
+
+        switch activity {
+        case .pet:
+            cancelCallChoreography()
+            beginPetStroke()
+        case .call:
+            cancelPettingChoreography()
+            beginCallChoreography()
+        default:
+            cancelInteractionChoreography()
+            if let behavior {
+                animations?.play(
+                    behavior.state.activity,
+                    careRequest: behavior.state.careRequest != nil,
+                    restart: true
+                )
+            }
         }
         refresh()
         save()
     }
-
     func preview(_ name: String) {
         do {
             try animations?.playClip(named: name)
+            cancelInteractionChoreography()
             previewing = true
             panel?.sceneHost.stopWander()
             status = "Preview: \(name)"
@@ -213,16 +250,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         localHour = Calendar.current.component(.hour, from: Date())
         needs = behavior.state.needs
         if !previewing {
-            if fetchSequence == nil {
+            if fetchSequence == nil, callPhase == nil, pettingPhase == nil {
                 animations?.play(behavior.state.activity, careRequest: behavior.state.careRequest != nil)
             }
             if fetchSequence != nil {
                 status = fetchFlightActive ? "Throwing" : "Fetching"
+            } else if callPhase != nil {
+                status = "Coming"
+            } else if pettingPhase != nil {
+                status = "Enjoying pets"
             } else if let request = behavior.state.careRequest {
                 status = request
             } else if panel?.sceneHost.isWandering == true {
                 status = "Exploring"
-            } else if panel?.sceneHost.cursorAttention == true && !behavior.isInteracting && behavior.state.activity != .sleep {
+            } else if panel?.sceneHost.cursorAttention == true
+                        && !behavior.isInteracting
+                        && behavior.state.activity != .sleep {
                 status = "Watching you"
             } else {
                 status = behavior.state.activity.rawValue.capitalized
@@ -236,18 +279,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     /// Foreground animation time never includes hidden or system-sleep gaps.
     func advancePresence(deltaTime: TimeInterval, active: Bool, cursorOverride: CGPoint? = nil) {
-        guard active, deltaTime > 0, let panel, let animations, let ambient, let brain = behavior else { return }
+        guard active, deltaTime > 0, let panel, let animations, let ambient, behavior != nil else { return }
         let dt = min(deltaTime, 0.1)
         let host = panel.sceneHost
         presenceTime += dt
-        let expressionActivity: PetActivity = fetchSequence == nil ? brain.state.activity : .fetch
+        advancePettingChoreography()
+        guard let brain = behavior else { return }
+        let expressionActivity: PetActivity
+        if let callPhase {
+            switch callPhase {
+            case .orienting:
+                expressionActivity = .call
+            case .approaching, .pawsUp:
+                expressionActivity = .play
+            case .pawsDown:
+                expressionActivity = .idle
+            }
+        } else if let pettingPhase {
+            expressionActivity = pettingPhase == .rising ? .idle : .pet
+        } else {
+            expressionActivity = fetchSequence == nil ? brain.state.activity : .fetch
+        }
         let running = animations.currentClip == AnimationController.Locomotion.run.rawValue
-        let engaged = host.cursorAttention
-            || presenceTime - interactionTime < 8
-            || expressionActivity == .pet
-            || expressionActivity == .play
-            || expressionActivity == .call
-            || expressionActivity == .fetch
+        let expressionSettling = pettingPhase == .rising || callPhase == .pawsDown
+        let engaged = !expressionSettling && (
+            host.cursorAttention
+                || presenceTime - interactionTime < 8
+                || expressionActivity == .pet
+                || expressionActivity == .play
+                || expressionActivity == .call
+                || expressionActivity == .fetch
+        )
         host.updateExpression(
             deltaTime: dt,
             targets: PetExpression.targets(
@@ -266,9 +328,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             advanceFetch(by: dt, host: host, animations: animations)
             return
         }
+        if callPhase != nil {
+            advanceCallChoreography(
+                deltaTime: dt,
+                host: host,
+                animations: animations,
+                cursorOverride: cursorOverride
+            )
+            animations.update(deltaTime: dt)
+            host.sceneTime = animations.sceneTime
+            host.setAnimationActive(true)
+            return
+        }
         host.wanderEnabled = wanderEnabled
         let activity = brain.state.activity
-        let suppressed = previewing || brain.isInteracting || brain.isRestingOnRequest
+        let suppressed = previewing
+            || brain.isInteracting
+            || brain.isRestingOnRequest
+            || pettingPhase != nil
         if suppressed || !wanderEnabled {
             host.stopWander()
             animations.endLocomotion()
@@ -311,6 +388,175 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         host.setAnimationActive(rendererShouldRun(host: host, animations: animations))
     }
 
+    private func beginPetStroke() {
+        recentPetStrokes.removeAll { $0 < presenceTime - 4 }
+        recentPetStrokes.append(presenceTime)
+        lastPetStrokeAt = presenceTime
+
+        switch pettingPhase {
+        case nil, .rising:
+            guard playChoreography(["shiba_pet_react", "shiba_pet_head_loop"]) else { return }
+            pettingPhase = .head
+            pettingStartedAt = presenceTime
+        case .side, .belly:
+            guard playChoreography(["shiba_belly_loop"]) else { return }
+            pettingPhase = .belly
+        case .head:
+            if recentPetStrokes.count >= 3 || presenceTime - pettingStartedAt >= 6 {
+                beginPetSettle()
+            }
+        case .settling:
+            break
+        }
+    }
+
+    private func beginPetSettle() {
+        guard playChoreography(["shiba_pet_settle", "shiba_lie_side_loop"]) else { return }
+        pettingPhase = .settling
+    }
+
+    private func advancePettingChoreography() {
+        guard let phase = pettingPhase, let animations else { return }
+        switch phase {
+        case .head:
+            if presenceTime - pettingStartedAt >= 6, presenceTime - lastPetStrokeAt < 5 {
+                beginPetSettle()
+            } else if presenceTime - lastPetStrokeAt >= 5 {
+                cancelPettingChoreography()
+                resumeBehaviorAnimation()
+            }
+        case .settling:
+            if animations.currentClip == "shiba_lie_side_loop" {
+                pettingPhase = .side
+            }
+            if presenceTime - lastPetStrokeAt >= 5 {
+                beginPetRise()
+            }
+        case .side, .belly:
+            if presenceTime - lastPetStrokeAt >= 5 {
+                beginPetRise()
+            }
+        case .rising:
+            if animations.currentClip == "shiba_sit_idle_loop" {
+                cancelPettingChoreography()
+                resumeBehaviorAnimation()
+            }
+        }
+    }
+
+    private func beginPetRise() {
+        guard pettingPhase != .rising,
+              playChoreography(["shiba_lie_side_up", "shiba_sit_idle_loop"]) else { return }
+        pettingPhase = .rising
+    }
+
+    private func beginCallChoreography() {
+        guard playChoreography(["shiba_call_stun", "shiba_call_curious"]) else { return }
+        callPhase = .orienting
+        callPawsLoopTime = 0
+    }
+
+    private func advanceCallChoreography(
+        deltaTime: TimeInterval,
+        host: SceneHost,
+        animations: AnimationController,
+        cursorOverride: CGPoint?
+    ) {
+        guard let phase = callPhase else { return }
+        switch phase {
+        case .orienting:
+            host.updatePresence(
+                deltaTime: deltaTime,
+                activity: .call,
+                wandering: false,
+                cursorOverride: cursorOverride
+            )
+            if animations.currentClip == "shiba_call_curious", !animations.isAnimating {
+                guard playChoreography(["shiba_run_loop"]) else { return }
+                host.startCallApproach()
+                callPhase = .approaching
+            }
+        case .approaching:
+            host.updatePresence(
+                deltaTime: deltaTime,
+                activity: .call,
+                wandering: animations.currentClip == AnimationController.Locomotion.run.rawValue,
+                cursorOverride: cursorOverride
+            )
+            if !host.isWandering {
+                guard playChoreography(["shiba_paws_up_enter", "shiba_paws_up_loop"]) else { return }
+                callPhase = .pawsUp
+                callPawsLoopTime = 0
+            }
+        case .pawsUp:
+            host.updatePresence(
+                deltaTime: deltaTime,
+                activity: .call,
+                wandering: false,
+                cursorOverride: cursorOverride
+            )
+            if animations.currentClip == "shiba_paws_up_loop" {
+                callPawsLoopTime += deltaTime
+            }
+            if callPawsLoopTime >= 3 {
+                guard playChoreography(["shiba_paws_down", "shiba_sit_idle_loop"]) else { return }
+                callPhase = .pawsDown
+            }
+        case .pawsDown:
+            host.updatePresence(
+                deltaTime: deltaTime,
+                activity: .call,
+                wandering: false,
+                cursorOverride: cursorOverride
+            )
+            if animations.currentClip == "shiba_sit_idle_loop" {
+                callPhase = nil
+                behavior?.interact(.sit, at: Date())
+                animations.play(.sit, restart: true)
+                refresh()
+            }
+        }
+    }
+
+    @discardableResult
+    private func playChoreography(_ clips: [String]) -> Bool {
+        guard let animations else { return false }
+        do {
+            try animations.playChoreography(clips)
+            return true
+        } catch {
+            failure = error.localizedDescription
+            return false
+        }
+    }
+
+    private func resumeBehaviorAnimation() {
+        guard let behavior else { return }
+        animations?.play(
+            behavior.state.activity,
+            careRequest: behavior.state.careRequest != nil,
+            restart: true
+        )
+    }
+
+    private func cancelInteractionChoreography() {
+        cancelCallChoreography()
+        cancelPettingChoreography()
+    }
+
+    private func cancelCallChoreography() {
+        callPhase = nil
+        callPawsLoopTime = 0
+        panel?.sceneHost.stopWander()
+    }
+
+    private func cancelPettingChoreography() {
+        pettingPhase = nil
+        recentPetStrokes.removeAll(keepingCapacity: true)
+        pettingStartedAt = -Double.infinity
+        lastPetStrokeAt = -Double.infinity
+    }
+
     /// A plain idle pose renders on demand. Everything with visible motion keeps SceneKit's
     /// display link live; freezing only the baseline idle loop is what returns collapsed-tray
     /// CPU to the plan's 0.0% budget without making fetch, wander, gaze, or reactions choppy.
@@ -335,6 +581,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             morningGreetingDay = day
             animations?.preferStretchOnNextWake()
         }
+        cancelInteractionChoreography()
         panel?.sceneHost.stopWander()
         animations?.endLocomotion()
         behavior?.interact(.idle, at: now)
@@ -365,6 +612,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private func beginAiming() {
         guard let panel, let screen = panel.screen ?? NSScreen.main else { return }
         if fetchSequence != nil { cancelFetch() }
+        cancelInteractionChoreography()
         previewing = false
         panel.sceneHost.stopWander()
         animations?.endLocomotion()

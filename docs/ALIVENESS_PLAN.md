@@ -4,7 +4,7 @@
 
 The dog should look alive without selecting animations. Care remains optional interaction, not the trigger required to make it move.
 
-**Built:** autonomous fidgets, posture changes, bounded wandering, cursor gaze and hover reactions, direct play gestures, daytime naps, return greetings, and morning/evening rhythms. All use the existing 24 Blender clips; no new Blender exports were needed.
+**Built:** autonomous fidgets, posture changes, bounded wandering, cursor gaze and hover reactions, direct play gestures, fetch, daytime naps, return greetings, morning/evening rhythms, mood-driven expression layers, and the 34-clip storyboard set.
 
 **Needs David's eye:** pace, character, and how enjoyable the interactions feel. Headless verification does not constitute visual acceptance or shipping.
 
@@ -13,7 +13,7 @@ The dog should look alive without selecting animations. Care remains optional in
 - `PetBehavior` owns needs, care activities, and persisted presence history.
 - `AmbientDirector` chooses visual actions using a seeded RNG, needs, local hour, cooldowns, and foreground elapsed time. It does not alter needs or persist its animation state.
 - `AnimationController` owns clip metadata, posture routes, fades, logical request identity, scoped reactions, and locomotion. Repeated care-loop refreshes do not restart animations.
-- `SceneHost` owns root travel, gaze, bounds, shadow, and hit-testing. `AppDelegate` coordinates these layers and workspace notifications.
+- `SceneHost` owns root travel, gaze, bounds, shadow, and hit-testing. `ExpressionAnimator` owns the lock-bridged additive face, tail, breathing, ear, and weight-shift constraints. `AppDelegate` coordinates these layers and workspace notifications.
 
 ## Fidgets and posture
 
@@ -47,9 +47,11 @@ The imported rig faces **+Z**: head/mouth positions established this in a bundle
 
 Cursor location is polled without a global input monitor or Accessibility permission. Gaze is disabled during sleep, eating, drinking, and diagnostic preview. The animation picker remains under **Animation diagnostics**; it is not needed for normal use. **Personality** controls activity level and whether the dog explores the panel.
 
-Expression is layered independently from the authored body clip. `PetExpression` maps needs, immediate activity, recent engagement, and locomotion into calm/content/excited/alert/low/asleep targets. SceneKit composes non-incremental constraints on `tail2`, `tail3`, `chest`, `spin`, `waist`, both ears, and the mouth. Tail carriage, right-biased social wag, breathing, ear flicks, weight shifts, jaw panting, and tongue movement therefore continue while the body changes clips. Tail layering yields to clips that explicitly own the tail. Fast wag/pant states request a 30 Hz loop; passive content stays below 2 Hz with no pant so idle redraws remain at 10 Hz.
+Expression is layered independently from the authored body clip. `PetExpression` maps needs, immediate activity, direct/recent engagement, and locomotion into calm/content/excited/alert/low/asleep targets. `ExpressionAnimator` composes non-incremental constraints on `tail2`, `tail3`, `chest`, `spin`, `waist`, both ears, and the mouth. Tail carriage, right-biased social wag, breathing, ear flicks, weight shifts, jaw panting, and tongue movement therefore continue while the body changes clips. Tail layering yields to clips that explicitly own the tail. Fast wag/pant states request a 30 Hz loop; passive content stays below 2 Hz with no pant so idle redraws remain at 10 Hz. A nearby cursor alone no longer promotes lifelong high affection into a permanent 30 Hz pant; direct hover or recent interaction is required.
 
-The eye material now has coat-specific open/closed/squint/wide 32×32 textures. Petting closes the eyes and opens the jaw before showing a procedural tongue plane parented to the mouth joint; sleep closes the eyes and hides the tongue. Blinks run at randomized 3–7 second intervals when no state forces an eye expression.
+The eye material has coat-specific open/closed/squint/wide 32×32 textures. Petting closes the eyes and opens the jaw before showing a procedural tongue plane parented to the mouth joint; sleep closes the eyes and hides the tongue. Blinks run at randomized 3–7 second intervals when no state forces an eye expression. A carried fetch ball suppresses procedural jaw pant and tongue motion so the mouth anchor stays stable.
+
+The storyboard's ten third-tier clips are wired into explicit interaction choreography. Petting hands `shiba_pet_react` into `shiba_pet_head_loop`; three strokes within four seconds or sustained petting settles through `shiba_pet_settle` into side rest, another stroke selects `shiba_belly_loop`, and five seconds without petting rises through `shiba_lie_side_up`. Call plays stun → curious orientation → a real root-motion run toward the near position → paws-up entry/loop → paws-down into sitting. Choreography uses the same posture metadata and preloaded players as ordinary activity routing.
 
 ## Presence rhythm
 
@@ -73,11 +75,13 @@ Evidence in `mac/build/aliveness-proof/`:
 - `transitions.txt`: autonomous clip changes; the verified run used 13 distinct clips and 20 distinct thirty-second behavior windows.
 - `unattended-10s.png`, `unattended-60s.png`, `unattended-300s.png`: representative frames.
 
-Checks cover all 24 clips actually changing bone transforms; viewport-edge pixels throughout the recording; root travel; pause/resume; posture routes; queued-walk cancellation; sustained play; sleep/stir/return; greeting/care preemption; and preview isolation. Separate headless input checks cover real hit-testing, click, double-click, and strokes. Gaze checks verify left/right/up/down direction and an unchanged head-joint origin. Persistence checks cover feeding 80 → 50, JSON reload, legacy saves, and backward clocks.
+The original aliveness soak checks all 24 base/tier-2 clips actually changing bone transforms; viewport-edge pixels throughout the recording; root travel; pause/resume; posture routes; queued-walk cancellation; sustained play; sleep/stir/return; greeting/care preemption; and preview isolation. Separate headless input checks cover real hit-testing, click, double-click, and strokes. Gaze checks verify left/right/up/down direction and an unchanged head-joint origin. Persistence checks cover feeding 80 → 50, JSON reload, legacy saves, and backward clocks.
 
 The first directional gaze snapshots did not exercise SceneKit's frame-to-frame constraint evaluation and missed a live cumulative head-spin defect. The corrected proof renders 3,600 continuous Metal frames with a held cursor, changing body yaw, 30 Hz scene updates, 60 Hz rendering, a sleeping neutral interval, and a stopped-animation interval. The gaze remained within **20.713°**, returned to **0.040°** during sleep, and moved the head joint origin by **0.000000**. A focused SceneKit reproduction measured the unsafe default at **60° after twelve 5° frames** versus **5°** with non-incremental evaluation. Evidence: `mac/build/gaze-spin-proof/metal-after/`.
 
-The expression proof loads the bundled coat-B model and production textures, installs all eight additive constraints, renders 180 Metal frames across petting and sleep, and asserts that every constraint is non-incremental. It verifies all four eye textures load, the closed-eye image reaches the eye material during petting, the tongue becomes visible then hides during sleep, and the petting tail delta stays anatomically bounded at **15.05°**. A 10-second, 30 Hz high-expression render used **0.25 CPU-seconds over 11.56 wall-seconds** (about **2.2% CPU**) with a **67.3 MiB** maximum resident set.
+The final expression proof loads the bundled coat-B model and production textures, installs all eight additive constraints, and renders 540 Metal frames across petting, ball carry, calm blinking, and sleep. It verifies all four eye textures load; a randomized open-eye blink closes and reopens; the closed-eye image reaches the eye material; the tongue shows for petting and hides for sleep and ball carry; carried-ball jaw pant is suppressed; call root travel reaches its target; and the petting tail delta stays anatomically bounded at **15.05°**. A 10-second, 30 Hz high-expression render used **0.37 CPU-seconds over 11.85 wall-seconds** (about **3.1% CPU**) with a **69.8 MiB** maximum resident set.
+
+A second bundled Metal probe initializes the production controller with all **34** clips, renders each clip without a load/channel failure, and exercises the runtime handoffs into `shiba_pet_head_loop`, `shiba_call_curious`, `shiba_paws_up_loop`, and `shiba_sit_idle_loop`. Evidence: `mac/build/expression-proof/verification.json` and `mac/build/clip-integration-proof/verification.json`.
 
 A 60-second real-time offscreen render of the broader aliveness system at 720×480 with 4× MSAA measured **2.55% CPU**, averaging **27.2 fps** on the current M2 Max. The expression-specific 30 Hz measurement above excludes 4× MSAA. Both are offscreen rendering measurements, not long-duration live-window soaks or battery-life guarantees. The old static scene's 0.0% CPU result is not an animation-performance claim.
 
@@ -85,4 +89,4 @@ Swift Testing execution remains blocked by the local Xcode/Command Line Tools ru
 
 ## Outside this change
 
-Fetch depth, park walking, and other roadmap work are separate. Unrelated concurrent UI work is preserved. No visible app restart, visual acceptance, distribution, or shipping is implied by the headless checks.
+Park walking and other roadmap work remain separate. Concurrent fetch work and the returned Blender clip stack were preserved as distinct commits. No visible app restart, visual acceptance, distribution, or shipping is implied by the headless checks.

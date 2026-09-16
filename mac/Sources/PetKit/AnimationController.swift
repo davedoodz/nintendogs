@@ -34,6 +34,7 @@ public final class AnimationController {
         case missingAssets([String])
         case clipValidationFailed(clip: String, missingNodes: [String])
         case unknownClip(String)
+        case invalidChoreography(String)
         case missingPostureMetadata([String])
 
         public var errorDescription: String? {
@@ -44,6 +45,8 @@ public final class AnimationController {
                 "Clip \(clip) targets rig nodes not present in this model: \(missing.joined(separator: ", "))."
             case .unknownClip(let name):
                 "\(name) is not one of the preloaded base clips."
+            case .invalidChoreography(let message):
+                message
             case .missingPostureMetadata(let names):
                 "No posture metadata for: \(names.joined(separator: ", "))."
             }
@@ -123,7 +126,7 @@ public final class AnimationController {
     /// to `AmbientDirector`; this controller only guarantees a clip is safe
     /// to play and returns to the right place afterward.
 
-    /// The 24 authored clips, filenames under `mac/Assets/shiba/clips/` minus
+    /// The 34 authored clips, filenames under `mac/Assets/shiba/clips/` minus
     /// the `.dae` extension, in the order listed in
     /// `docs/ANIMATION_CONTRACT.md`. `_loop` is the sole signal for whether a
     /// clip repeats, matching that contract's naming rule. Public so a
@@ -136,6 +139,10 @@ public final class AnimationController {
         "shiba_stand_from_sit", "shiba_sit_from_lie", "shiba_wake", "shiba_beg_loop",
         "shiba_yawn", "shiba_scratch", "shiba_look_around_loop", "shiba_drink_loop",
         "shiba_alert", "shiba_pet_react", "shiba_shake", "shiba_fetch_carry_loop",
+        "shiba_pet_head_loop", "shiba_pet_settle", "shiba_lie_side_loop",
+        "shiba_belly_loop", "shiba_lie_side_up", "shiba_call_stun",
+        "shiba_call_curious", "shiba_paws_up_enter", "shiba_paws_up_loop",
+        "shiba_paws_down",
     ]
 
     /// Start/end posture for every authored clip, per `blender/CLIPS_RESULT.md`
@@ -167,6 +174,16 @@ public final class AnimationController {
         "shiba_pet_react": PostureRange(.standing),
         "shiba_shake": PostureRange(.standing),
         "shiba_fetch_carry_loop": PostureRange(.standing),
+        "shiba_pet_head_loop": PostureRange(.standing),
+        "shiba_pet_settle": PostureRange(start: .standing, end: .lying),
+        "shiba_lie_side_loop": PostureRange(.lying),
+        "shiba_belly_loop": PostureRange(.lying),
+        "shiba_lie_side_up": PostureRange(start: .lying, end: .sitting),
+        "shiba_call_stun": PostureRange(.standing),
+        "shiba_call_curious": PostureRange(.standing),
+        "shiba_paws_up_enter": PostureRange(start: .standing, end: .sitting),
+        "shiba_paws_up_loop": PostureRange(.sitting),
+        "shiba_paws_down": PostureRange(.sitting),
     ]
 
     private let root: SCNNode
@@ -211,7 +228,7 @@ public final class AnimationController {
     public private(set) var sceneTime: TimeInterval = 0
 
     /// Preloads and validates every clip, then attaches every channel's
-    /// player to the rig. Validation happens in a read-only pass over all 24
+    /// player to the rig. Validation happens in a read-only pass over all
     /// clips before any rig node is mutated: either every clip's channels
     /// resolve against `root`, or `init` throws and nothing was attached.
     public init(root: SCNNode) throws {
@@ -309,13 +326,11 @@ public final class AnimationController {
         beginStep(pendingSteps.removeFirst())
     }
 
-    /// Explicit preview of any of the 24 preloaded clips, bypassing the
-    /// activity state machine entirely — for QA/smoke-testing every clip in
-    /// isolation. Returns the clip's duration. Does not update the tracked
-    /// activity/posture (an arbitrary clip may not correspond to a coherent
-    /// one), so call `play(_:)` again afterward to resume normal behavior;
-    /// the next `play` call is guaranteed to take effect even if it names the
-    /// same activity that was current before the preview.
+    /// Explicit preview of any preloaded clip, bypassing the activity state
+    /// machine entirely — for QA/smoke-testing clips in isolation. Returns
+    /// the clip's duration. Does not update the tracked activity/posture, so
+    /// call `play(_:)` again afterward to resume normal behavior; that call
+    /// is guaranteed to take effect even when it names the prior activity.
     @discardableResult
     public func playClip(named name: String) throws -> TimeInterval {
         guard Self.clipNames.contains(name), let clip = clips[name] else {
@@ -326,6 +341,52 @@ public final class AnimationController {
         isPreviewing = true
         beginStep(Step(clip: name, posture: currentPosture))
         return clip.duration
+    }
+
+    /// Plays an ordered user-interaction choreography while keeping the
+    /// logical behavior lane untouched. Posture routes are inserted between
+    /// clips when necessary; only the final clip may loop.
+    ///
+    /// Unlike `triggerReaction`, an explicit interaction may preempt the
+    /// current visual immediately. The app remains responsible for ending or
+    /// replacing a terminal loop when the interaction ends.
+    @discardableResult
+    public func playChoreography(_ names: [String]) throws -> TimeInterval {
+        guard !names.isEmpty else { return 0 }
+        for name in names {
+            guard Self.clipNames.contains(name), clips[name] != nil else {
+                throw Error.unknownClip(name)
+            }
+        }
+        for name in names.dropLast() where clips[name]?.repeats == true {
+            throw Error.invalidChoreography(
+                "Looping clip \(name) must be the final choreography step."
+            )
+        }
+
+        var posture = currentPosture
+        var steps: [Step] = []
+        for name in names {
+            guard let range = Self.posture[name] else {
+                throw Error.missingPostureMetadata([name])
+            }
+            if posture != range.start {
+                steps += Self.route(from: posture, to: range.start, useStretch: false)
+            }
+            steps.append(Step(clip: name, posture: range.end))
+            posture = range.end
+        }
+
+        isPreviewing = false
+        isLocomoting = false
+        restingVariantOverride = nil
+        pendingCompletion = .none
+        pendingSteps = steps
+        let duration = steps.reduce(0) { partial, step in
+            partial + (clips[step.clip]?.repeats == true ? 0 : (clips[step.clip]?.duration ?? 0))
+        }
+        beginStep(pendingSteps.removeFirst())
+        return duration
     }
 
     /// Plays a single named clip as a **scoped ambient overlay**: never

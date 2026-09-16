@@ -112,6 +112,7 @@ final class SceneHost: SCNView {
     private(set) var isRunning = false
     private var wanderTarget: SCNVector3?
     private var gaitSpeeds: (walk: CGFloat, run: CGFloat)?
+    private var isCallApproaching = false
 
     // MARK: Gaze
 
@@ -260,15 +261,13 @@ final class SceneHost: SCNView {
         let caring = activity == .eat || activity == .drink
         if displayedActivity != activity {
             displayedActivity = activity
-            if caring || activity == .call {
-                // Only these two ever need to reposition the root; every
-                // other activity (idle/sit/sleep/play/pet) leaves the pet
-                // exactly where it is, so a wandered-to spot survives the
-                // ~1s behavior refresh that calls this on every tick.
+            if caring {
+                // Care bowls return to the home position. Other interactions
+                // preserve the pet's current root; call choreography owns its
+                // explicit run toward the camera.
                 stopWander()
                 petAnchor.removeAction(forKey: "approach")
-                let destination = SCNVector3(0, 0, activity == .call ? 0.3 : 0)
-                petAnchor.runAction(.move(to: destination, duration: 0.8), forKey: "approach")
+                petAnchor.runAction(.move(to: SCNVector3(0, 0, 0), duration: 0.8), forKey: "approach")
             }
         }
         bowl.isHidden = !caring
@@ -277,8 +276,6 @@ final class SceneHost: SCNView {
                 activity == .drink ? NSColor.systemBlue : NSColor.brown
             let deficit = activity == .drink ? needs.thirst : needs.hunger
             bowlContents.scale = SCNVector3(1, max(0.05, deficit / 100), 1)
-            petAnchor.eulerAngles.y = 0
-        } else if activity == .call {
             petAnchor.eulerAngles.y = 0
         }
     }
@@ -529,7 +526,7 @@ final class SceneHost: SCNView {
     ) {
         guard deltaTime > 0 else { return }
         clampToWalkableBounds()
-        if isWandering, wandering, wanderEnabled {
+        if isWandering, wandering, wanderEnabled || isCallApproaching {
             stepWander(deltaTime: deltaTime)
         }
         let viewPoint = cursorViewPoint(override: cursorOverride)
@@ -553,9 +550,26 @@ final class SceneHost: SCNView {
         let distance = CGFloat(hypot(dx, dz))
         let range = walkableXRange(atWorldZ: target.z)
         let runThreshold = (range.upperBound - range.lowerBound) * Self.runDistanceFraction
+        beginTravel(to: target, running: running && distance >= runThreshold, callApproach: false)
+    }
+
+    /// Runs toward the near, centered call position even when autonomous
+    /// wandering is disabled. The caller owns the run clip.
+    func startCallApproach() {
+        guard gaitSpeeds != nil else { return }
+        beginTravel(
+            to: SCNVector3(0, petAnchor.position.y, 0.3),
+            running: true,
+            callApproach: true
+        )
+    }
+
+    private func beginTravel(to target: SCNVector3, running: Bool, callApproach: Bool) {
+        petAnchor.removeAction(forKey: "approach")
         wanderTarget = target
         isWandering = true
-        isRunning = running && distance >= runThreshold
+        isRunning = running
+        isCallApproaching = callApproach
     }
 
     /// Hard-cancels any in-progress or pending wander: clears the target and
@@ -566,6 +580,7 @@ final class SceneHost: SCNView {
         wanderTarget = nil
         isWandering = false
         isRunning = false
+        isCallApproaching = false
     }
 
     private func stepWander(deltaTime: TimeInterval) {
@@ -586,6 +601,7 @@ final class SceneHost: SCNView {
             wanderTarget = nil
             isWandering = false
             isRunning = false
+            isCallApproaching = false
             return
         }
 
