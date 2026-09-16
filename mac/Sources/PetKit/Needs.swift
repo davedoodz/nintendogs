@@ -74,7 +74,7 @@ public struct PetNeeds: Codable, Sendable, Equatable {
 /// What the pet is doing right now. `idle`/`sit`/`sleep` are chosen autonomously
 /// by `PetBehavior.tick`; the rest are momentary interactions triggered by `interact`.
 public enum PetActivity: String, Codable, Sendable, CaseIterable, Equatable {
-    case idle, sit, sleep, eat, drink, play, call, pet
+    case idle, sit, sleep, eat, drink, play, call, pet, fetch
 }
 
 /// A snapshot of the pet: current meters, what it is doing, and when this

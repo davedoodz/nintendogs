@@ -222,3 +222,36 @@ private func date(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: 
     #expect(pet.state.activity == .eat)
     #expect(pet.isInteracting)
 }
+
+@Test func fetchAppliesFunAndAffectionOverItsActualDuration() {
+    let start = date(2026, 1, 1, 12)
+    var behavior = PetBehavior(state: PetState(
+        needs: PetNeeds(fun: 0, affection: 0),
+        activity: .idle,
+        lastUpdated: start
+    ))
+    behavior.interact(.fetch, at: start, duration: 8)
+    behavior.tick(at: start.addingTimeInterval(8), calendar: utc)
+    #expect(abs(behavior.state.needs.fun - 100) < 1e-6)
+    #expect(abs(behavior.state.needs.affection - 20) < 1e-6)
+}
+
+@Test func anotherInteractionCancelsFetchImmediately() {
+    let start = date(2026, 1, 1, 12)
+    var behavior = PetBehavior(state: PetState(activity: .idle, lastUpdated: start))
+    behavior.interact(.fetch, at: start, duration: 10)
+    #expect(behavior.state.activity == .fetch)
+    behavior.interact(.pet, at: start.addingTimeInterval(2))
+    #expect(behavior.state.activity == .pet)
+}
+
+@Test func careRequestStaysNilDuringFetch() {
+    let start = date(2026, 1, 1, 12)
+    var behavior = PetBehavior(state: PetState(
+        needs: PetNeeds(hunger: 90),
+        activity: .idle,
+        lastUpdated: start
+    ))
+    behavior.interact(.fetch, at: start, duration: 6)
+    #expect(behavior.state.careRequest == nil)
+}

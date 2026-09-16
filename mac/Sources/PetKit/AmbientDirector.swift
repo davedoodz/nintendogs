@@ -192,7 +192,7 @@ public final class AmbientDirector {
             scheduleSitPool(needs: needs)
         case (.sleep, _):
             scheduleStirTimer()
-        case (.eat, _), (.drink, _), (.play, _), (.call, _), (.pet, _):
+        case (.eat, _), (.drink, _), (.play, _), (.call, _), (.pet, _), (.fetch, _):
             break // momentary interactions: parent should already be passing `suppressed: true`
         }
     }

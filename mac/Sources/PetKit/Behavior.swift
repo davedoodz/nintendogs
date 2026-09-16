@@ -18,9 +18,9 @@ import Foundation
 /// - Momentary interactions replenish/boost their target meter(s) linearly over
 ///   their fixed duration, reaching a full swing (0↔100) if run start-to-finish:
 ///   `eat` 10s (hunger), `drink` 6s (thirst), `play` 12s (+100 fun, +20 affection),
-///   `pet` 5s (+100 affection, +10 fun), `call` 2s (+5 affection, wakes from sleep).
-///   All other meters keep drifting normally during an interaction except the
-///   one(s) it targets.
+///   `pet` 5s (+100 affection, +10 fun), `call` 2s (+5 affection, wakes from sleep),
+///   `fetch` (duration varies by throw distance; +100 fun, +20 affection, plus play's
+///   extra awake energy drain). Other meters keep drifting normally except targets.
 /// - Offline/behind-schedule catch-up is capped at 12h of simulated drift: a
 ///   longer real gap still only advances the meters by 12h worth, then stamps
 ///   `lastUpdated` to the real `at` so the next tick resumes from now.
@@ -33,6 +33,8 @@ public struct PetBehavior: Sendable {
     /// is running; not part of `PetState`, so it never persists and never survives
     /// a relaunch — see `init(state:)`.
     private var interactionEndsAt: Date?
+    /// Actual running interaction length; fetch varies with throw distance.
+    private var interactionDuration: TimeInterval?
     private var manualRestUntil: Date?
     private var awakeUntil: Date?
 
@@ -80,13 +82,14 @@ public struct PetBehavior: Sendable {
         // (process relaunch, long background gap): its remaining duration is
         // unknown, so treat it as already finished and let the first tick
         // re-derive an autonomous activity from a clean baseline.
-        if Self.duration(for: normalized.activity) != nil {
+        if Self.isMomentary(normalized.activity) {
             normalized.activity = .idle
         }
         normalized.needs.clamp()
         normalized.lastInteractionAt = normalized.lastInteractionAt ?? normalized.lastUpdated
         self.state = normalized
         self.interactionEndsAt = nil
+        self.interactionDuration = nil
     }
 
     /// Advances `state` from `state.lastUpdated` to `at`, in 1-second steps,
@@ -110,13 +113,23 @@ public struct PetBehavior: Sendable {
     /// duration and then hand back control to autonomous selection; `idle`/`sit`/
     /// `sleep` are applied immediately with no protected duration.
     public mutating func interact(_ activity: PetActivity, at date: Date) {
+        perform(activity, at: date, duration: Self.duration(for: activity))
+    }
+
+    /// For interactions whose length is not fixed — currently fetch.
+    public mutating func interact(_ activity: PetActivity, at date: Date, duration: TimeInterval) {
+        perform(activity, at: date, duration: duration)
+    }
+
+    private mutating func perform(_ activity: PetActivity, at date: Date, duration: TimeInterval?) {
         guard date >= state.lastUpdated else { return }
         tick(at: date, calendar: .current)
         manualRestUntil = activity == .sleep ? date.addingTimeInterval(15 * 60) : nil
         state.lastInteractionAt = date
         awakeUntil = activity == .sleep ? nil : date.addingTimeInterval(60)
         state.activity = activity
-        interactionEndsAt = Self.duration(for: activity).map { date.addingTimeInterval($0) }
+        interactionEndsAt = duration.map { date.addingTimeInterval($0) }
+        interactionDuration = duration
     }
 
     private mutating func step(dt: TimeInterval, at cursor: Date, calendar: Calendar) {
@@ -126,6 +139,7 @@ public struct PetBehavior: Sendable {
             applyInteraction(state.activity, dt: interactionTime)
             if cursor >= endsAt {
                 interactionEndsAt = nil
+                interactionDuration = nil
                 let night = Self.isNight(cursor, calendar: calendar)
                 state.activity = autonomousActivity(at: cursor, night: night)
                 applyAutonomous(state.activity, dt: dt - interactionTime)
@@ -202,7 +216,7 @@ public struct PetBehavior: Sendable {
             state.needs.energy += Self.energySleepRecoverPerSecond * dt
         case .sit:
             break
-        case .idle, .eat, .drink, .play, .call, .pet:
+        case .idle, .eat, .drink, .play, .call, .pet, .fetch:
             state.needs.energy -= Self.energyAwakeDrainPerSecond * dt
         }
         applyPassiveDrift(dt: dt, excluding: [])
@@ -221,6 +235,12 @@ public struct PetBehavior: Sendable {
         case .play:
             state.needs.fun += Self.funGainPerSecondPlay * dt
             state.needs.affection += Self.affectionGainPerSecondPlay * dt
+            state.needs.energy -= (Self.energyAwakeDrainPerSecond + Self.energyPlayExtraDrainPerSecond) * dt
+            applyPassiveDrift(dt: dt, excluding: [.fun, .affection])
+        case .fetch:
+            let duration = max(interactionDuration ?? 0, .ulpOfOne)
+            state.needs.fun += (100.0 / duration) * dt
+            state.needs.affection += (20.0 / duration) * dt
             state.needs.energy -= (Self.energyAwakeDrainPerSecond + Self.energyPlayExtraDrainPerSecond) * dt
             applyPassiveDrift(dt: dt, excluding: [.fun, .affection])
         case .pet:
@@ -254,7 +274,14 @@ public struct PetBehavior: Sendable {
         case .play: playDuration
         case .pet: petDuration
         case .call: callDuration
-        case .idle, .sit, .sleep: nil
+        case .idle, .sit, .sleep, .fetch: nil
+        }
+    }
+
+    private static func isMomentary(_ activity: PetActivity) -> Bool {
+        switch activity {
+        case .eat, .drink, .play, .pet, .call, .fetch: true
+        case .idle, .sit, .sleep: false
         }
     }
 }

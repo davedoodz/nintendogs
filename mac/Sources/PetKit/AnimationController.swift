@@ -545,6 +545,10 @@ public final class AnimationController {
         case .pet:
             // Momentary: the pet-specific reaction, then fall back to idle.
             ActivityProfile(posture: .standing, mainClip: "shiba_pet_react", fallback: .idle)
+        case .fetch:
+            // Fetch phases are driven directly with `playClip(named:)`; idle is a harmless
+            // exhaustive fallback if a caller accidentally routes fetch through `play`.
+            ActivityProfile(posture: .standing, mainClip: "shiba_idle_loop", fallback: nil)
         }
     }
 
