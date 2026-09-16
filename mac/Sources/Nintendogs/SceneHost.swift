@@ -57,11 +57,23 @@ final class SceneHost: SCNView {
     var onCall: (() -> Void)?
     var onStroke: (() -> Void)?
     var onPlay: (() -> Void)?
+    var onBallPicked: (() -> Void)?
     private var stroked = false
     private var lastStrokeTime: TimeInterval = 0
     private let bowl = SCNNode()
     private let bowlContents = SCNNode()
     private var displayedActivity: PetActivity?
+    private let ballRoot = SCNNode()
+    private let ballShadow = SCNNode()
+    private weak var mouthNode: SCNNode?
+    private(set) var ballAttached = false
+    private var ballThrow: (start: SCNVector3, landing: SCNVector3, elapsed: TimeInterval)?
+    var hasBall: Bool { ballRoot.parent != nil }
+    var ballGroundPosition: SIMD2<Double>? {
+        guard hasBall else { return nil }
+        let world = ballRoot.worldPosition
+        return SIMD2(Double(world.x), Double(world.z))
+    }
 
     /// Held as a property so the arena can retarget the projection and turn screen points
     /// into ground points (KTD4, KTD6).
@@ -172,6 +184,7 @@ final class SceneHost: SCNView {
         bowl.addChildNode(bowlContents)
         bowl.isHidden = true
         scene.rootNode.addChildNode(bowl)
+        configureBall(in: scene)
     }
 
     func setPet(_ node: SCNNode, rawHeight: CGFloat) throws {
@@ -191,6 +204,7 @@ final class SceneHost: SCNView {
         let z = max(abs(minimum.z), abs(maximum.z))
         petRadius = hypot(x, z) + 0.06
         headNode = node.childNode(withName: "head", recursively: true)
+        mouthNode = node.childNode(withName: "mouth", recursively: true)
         attachGazeConstraint()
         setNeedsDisplay(bounds)
     }
@@ -232,6 +246,149 @@ final class SceneHost: SCNView {
         } else if activity == .call {
             petAnchor.eulerAngles.y = 0
         }
+    }
+
+    // MARK: - Fetch object and root pose (KTD6, KTD7)
+
+    private func configureBall(in scene: SCNScene) {
+        let sphere = SCNSphere(radius: 0.08)
+        sphere.segmentCount = 24
+        let felt = SCNMaterial()
+        felt.diffuse.contents = NSColor(calibratedRed: 0.72, green: 0.84, blue: 0.16, alpha: 1)
+        felt.roughness.contents = 0.82
+        sphere.firstMaterial = felt
+        let body = SCNNode(geometry: sphere)
+        body.name = "fetchBall"
+        body.position.y = 0.08
+        ballRoot.addChildNode(body)
+
+        let seamRotations: [SCNVector3] = [
+            SCNVector3(CGFloat.pi / 2, 0, 0),
+            SCNVector3(0, 0, CGFloat.pi / 2),
+        ]
+        for rotation in seamRotations {
+            let seam = SCNTorus(ringRadius: 0.063, pipeRadius: 0.005)
+            seam.ringSegmentCount = 24
+            seam.pipeSegmentCount = 8
+            seam.firstMaterial?.diffuse.contents = NSColor.white.withAlphaComponent(0.9)
+            let node = SCNNode(geometry: seam)
+            node.position.y = 0.08
+            node.eulerAngles = rotation
+            node.name = "fetchBallSeam"
+            ballRoot.addChildNode(node)
+        }
+        ballRoot.name = "fetchBallRoot"
+        ballRoot.isHidden = true
+
+        ballShadow.geometry = SCNPlane(width: 0.20, height: 0.14)
+        let shadow = SCNMaterial()
+        shadow.diffuse.contents = Self.blobShadowImage()
+        shadow.lightingModel = .constant
+        shadow.isDoubleSided = true
+        shadow.writesToDepthBuffer = false
+        ballShadow.geometry?.materials = [shadow]
+        ballShadow.eulerAngles.x = -.pi / 2
+        ballShadow.position.y = 0.003
+        ballShadow.isHidden = true
+        scene.rootNode.addChildNode(ballRoot)
+        scene.rootNode.addChildNode(ballShadow)
+    }
+
+    func setPetPose(position: SIMD2<Double>, heading: Double) {
+        stopWander()
+        petAnchor.removeAction(forKey: "approach")
+        petAnchor.position = SCNVector3(position.x, 0, position.y)
+        petAnchor.eulerAngles.y = CGFloat(heading)
+        blobShadow.position = SCNVector3(position.x, blobShadow.position.y, position.y)
+    }
+
+    func placeBall(at position: SIMD2<Double>) {
+        ballRoot.removeAllActions()
+        ballThrow = nil
+        if ballRoot.parent !== scene?.rootNode {
+            ballRoot.removeFromParentNode()
+            scene?.rootNode.addChildNode(ballRoot)
+        }
+        ballAttached = false
+        ballRoot.position = SCNVector3(position.x, 0, position.y)
+        ballRoot.isHidden = false
+        ballShadow.position = SCNVector3(position.x, ballShadow.position.y, position.y)
+        ballShadow.isHidden = false
+        setNeedsDisplay(bounds)
+    }
+
+    /// Starts a 0.75-second parabola. `advanceBallThrow(by:)` owns timing on the app's
+    /// main-actor loop, avoiding SceneKit action callbacks racing actor-isolated scene state.
+    func throwBall(to landing: SIMD2<Double>) {
+        attachBall(toMouth: false)
+        let start = SCNVector3(
+            petAnchor.position.x,
+            petAnchor.position.y + 0.9,
+            petAnchor.position.z + 1.6
+        )
+        let destination = SCNVector3(landing.x, 0, landing.y)
+        ballRoot.removeAllActions()
+        if ballRoot.parent !== scene?.rootNode {
+            ballRoot.removeFromParentNode()
+            scene?.rootNode.addChildNode(ballRoot)
+        }
+        ballRoot.position = start
+        ballRoot.isHidden = false
+        ballShadow.isHidden = false
+        ballThrow = (start, destination, 0)
+    }
+
+    /// Advances the in-flight ball; returns `true` on the tick it lands.
+    func advanceBallThrow(by deltaTime: TimeInterval) -> Bool {
+        guard var flight = ballThrow else { return false }
+        flight.elapsed = min(flight.elapsed + max(deltaTime, 0), 0.75)
+        let t = CGFloat(flight.elapsed / 0.75)
+        let arc = CGFloat(0.85) * 4 * t * (1 - t)
+        let x = flight.start.x + (flight.landing.x - flight.start.x) * t
+        let z = flight.start.z + (flight.landing.z - flight.start.z) * t
+        let y = flight.start.y + (flight.landing.y - flight.start.y) * t + arc
+        ballRoot.position = SCNVector3(x, y, z)
+        ballShadow.position = SCNVector3(x, ballShadow.position.y, z)
+        ballShadow.opacity = 0.3 + 0.7 * (1 - min(y / 1.8, 1))
+        if flight.elapsed >= 0.75 {
+            ballRoot.position = flight.landing
+            ballShadow.opacity = 1
+            ballThrow = nil
+            return true
+        }
+        ballThrow = flight
+        return false
+    }
+
+    func attachBall(toMouth attach: Bool) {
+        guard attach != ballAttached else { return }
+        ballRoot.removeAllActions()
+        if attach, let mouthNode {
+            ballRoot.removeFromParentNode()
+            mouthNode.addChildNode(ballRoot)
+            ballRoot.position = SCNVector3(0, 0.025, 0.09)
+            ballRoot.eulerAngles = SCNVector3(0, 0, 0)
+            ballShadow.isHidden = true
+            ballAttached = true
+        } else {
+            let world = ballRoot.presentation.worldPosition
+            ballRoot.removeFromParentNode()
+            scene?.rootNode.addChildNode(ballRoot)
+            ballRoot.worldPosition = world
+            ballAttached = false
+            ballShadow.isHidden = ballRoot.isHidden
+            ballShadow.position = SCNVector3(world.x, ballShadow.position.y, world.z)
+        }
+    }
+
+    func removeBall() {
+        ballRoot.removeAllActions()
+        ballThrow = nil
+        ballRoot.removeFromParentNode()
+        ballRoot.isHidden = true
+        ballShadow.isHidden = true
+        ballAttached = false
+        setNeedsDisplay(bounds)
     }
 
     // MARK: - Presence: wander, gaze, cursor, shadow
@@ -637,6 +794,11 @@ final class SceneHost: SCNView {
         stroked = false
         let point = convert(event.locationInWindow, from: nil)
         let hit = hitTest(point, options: [SCNHitTestOption.firstFoundOnly: true])
+        if let node = hit.first?.node, isBallNode(node), !ballAttached {
+            removeBall()
+            onBallPicked?()
+            return
+        }
         if let node = hit.first?.node, isPetNode(node) {
             petClickPoint = point
             return
@@ -682,6 +844,15 @@ final class SceneHost: SCNView {
         var current: SCNNode? = node
         while let candidate = current {
             if candidate === petAnchor { return true }
+            current = candidate.parent
+        }
+        return false
+    }
+
+    private func isBallNode(_ node: SCNNode) -> Bool {
+        var current: SCNNode? = node
+        while let candidate = current {
+            if candidate === ballRoot { return true }
             current = candidate.parent
         }
         return false

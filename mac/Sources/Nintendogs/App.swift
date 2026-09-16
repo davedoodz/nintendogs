@@ -38,6 +38,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var workspaceSleeping = false
     private var lastGreeting = -Double.infinity
     private var morningGreetingDay: Date?
+    private var fetchSequence: FetchSequence?
+    private var fetchPhase: FetchSequence.Phase?
+    private var fetchIsThrowing = false
+    private var fetchBallAttached = false
+    private var ballExpiresAt: Date?
+    private static let ballLifetime: TimeInterval = 5 * 60
 
     private func observePresence() {
         let center = NSWorkspace.shared.notificationCenter
@@ -90,6 +96,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             panel.sceneHost.onCall = { [weak self] in self?.interact(.call) }
             panel.sceneHost.onStroke = { [weak self] in self?.interact(.pet) }
             panel.sceneHost.onPlay = { [weak self] in self?.interact(.play) }
+            panel.sceneHost.onBallPicked = { [weak self] in
+                self?.ballExpiresAt = nil
+                self?.hold(.ball)
+            }
             if let screen = NotchTrayPanel.preferredScreen() {
                 let tray = NotchTrayPanel(screen: screen)
                 tray.onPick = { [weak self] item in self?.hold(item) }
@@ -118,6 +128,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                     self.advancePresence(deltaTime: delta, active: !self.workspaceSleeping && self.panel?.isVisible == true)
                     previous = uptime
                     let now = Date()
+                    if let expiry = self.ballExpiresAt, now >= expiry, self.fetchSequence == nil {
+                        self.panel?.sceneHost.removeBall()
+                        self.ballExpiresAt = nil
+                    }
                     if now.timeIntervalSince(self.lastTick) >= 1 || now < self.lastTick {
                         self.behavior?.tick(at: now)
                         self.lastTick = now
@@ -137,6 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     func interact(_ activity: PetActivity) {
         guard behavior != nil else { return }
+        if fetchSequence != nil { cancelFetch() }
         previewing = false
         interactionTime = presenceTime
         wasHovering = false
@@ -165,8 +180,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         localHour = Calendar.current.component(.hour, from: Date())
         needs = behavior.state.needs
         if !previewing {
-            animations?.play(behavior.state.activity, careRequest: behavior.state.careRequest != nil)
-            if let request = behavior.state.careRequest {
+            if fetchSequence == nil {
+                animations?.play(behavior.state.activity, careRequest: behavior.state.careRequest != nil)
+            }
+            if fetchSequence != nil {
+                status = fetchIsThrowing ? "Throwing" : "Fetching"
+            } else if let request = behavior.state.careRequest {
                 status = request
             } else if panel?.sceneHost.isWandering == true {
                 status = "Exploring"
@@ -186,6 +205,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let dt = min(deltaTime, 0.1)
         let host = panel.sceneHost
         presenceTime += dt
+        if fetchSequence != nil {
+            advanceFetch(by: dt, host: host, animations: animations)
+            return
+        }
         host.wanderEnabled = wanderEnabled
         let activity = brain.state.activity
         let suppressed = previewing || brain.isInteracting || brain.isRestingOnRequest
@@ -260,11 +283,117 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         heldItems.end()
     }
 
-    /// U3 consumes the click and releases the held item. U6 routes the ball into the scene;
-    /// U7 routes bowls into the existing care loop.
+    /// Accepts the held item only on the display that owns the pet panel. Other displays keep
+    /// the item held (the v1 arena is intentionally single-display).
     func throwHeld(at point: NSPoint, on screen: NSScreen) {
-        guard screen === panel?.screen else { return }
-        heldItems.end()
+        guard screen === panel?.screen, let item = heldItems.item, let panel else { return }
+        switch item {
+        case .ball:
+            panel.enterArena(on: screen)
+            guard let ground = panel.sceneHost.groundPoint(forScreenPoint: point) else {
+                panel.leaveArena()
+                return
+            }
+            heldItems.end()
+            beginFetch(to: ground)
+        case .foodBowl, .waterBowl:
+            // U7 routes bowls into the existing care interactions.
+            heldItems.end()
+        }
+    }
+
+    private func beginFetch(to landing: SIMD2<Double>) {
+        guard let panel, let animations else { return }
+        previewing = false
+        ballExpiresAt = nil
+        panel.sceneHost.stopWander()
+        animations.endLocomotion()
+        ambient?.setAttention(false)
+        let home = panel.sceneHost.petPosition
+        let durations = FetchSequence.ClipDurations(
+            pickup: animations.duration(ofClip: "shiba_fetch_pickup") ?? 2.5,
+            happy: animations.duration(ofClip: "shiba_happy") ?? 2.5
+        )
+        let sequence = FetchSequence(
+            home: SIMD2(Double(home.x), Double(home.z)),
+            ball: landing,
+            clipDurations: durations
+        )
+        fetchSequence = sequence
+        fetchPhase = nil
+        fetchBallAttached = false
+        fetchIsThrowing = true
+        status = "Throwing"
+        panel.sceneHost.throwBall(to: landing)
+    }
+
+    private func advanceFetch(by dt: TimeInterval, host: SceneHost, animations: AnimationController) {
+        if fetchIsThrowing {
+            if host.advanceBallThrow(by: dt), let sequence = fetchSequence {
+                fetchIsThrowing = false
+                behavior?.interact(.fetch, at: Date(), duration: sequence.totalDuration)
+                refresh()
+            }
+            animations.update(deltaTime: dt)
+            host.sceneTime = animations.sceneTime
+            host.setAnimationActive(true)
+            return
+        }
+        guard var sequence = fetchSequence else { return }
+        sequence.advance(by: dt)
+        fetchSequence = sequence
+        host.setPetPose(position: sequence.position, heading: sequence.heading)
+        if fetchBallAttached != sequence.ballAttached {
+            host.attachBall(toMouth: sequence.ballAttached)
+            fetchBallAttached = sequence.ballAttached
+        }
+        if !sequence.ballAttached {
+            host.placeBall(at: sequence.ballPosition)
+        }
+        if fetchPhase != sequence.phase {
+            fetchPhase = sequence.phase
+            if let clip = sequence.clip {
+                do { try animations.playClip(named: clip) }
+                catch { failure = error.localizedDescription }
+            }
+        }
+        animations.update(deltaTime: dt)
+        host.sceneTime = animations.sceneTime
+        host.setAnimationActive(animations.isAnimating)
+        if sequence.phase == .done {
+            finishFetch(sequence)
+        }
+    }
+
+    private func finishFetch(_ sequence: FetchSequence) {
+        guard let panel else { return }
+        panel.sceneHost.attachBall(toMouth: false)
+        panel.sceneHost.placeBall(at: sequence.ballPosition)
+        panel.sceneHost.setPetPose(position: sequence.position, heading: sequence.heading)
+        panel.leaveArena()
+        fetchSequence = nil
+        fetchPhase = nil
+        fetchIsThrowing = false
+        fetchBallAttached = false
+        ballExpiresAt = Date().addingTimeInterval(Self.ballLifetime)
+        animations?.play(.idle, restart: true)
+        refresh()
+        save()
+    }
+
+    private func cancelFetch() {
+        guard fetchSequence != nil, let panel else { return }
+        let restingBall = panel.sceneHost.ballGroundPosition
+        panel.sceneHost.attachBall(toMouth: false)
+        if let restingBall { panel.sceneHost.placeBall(at: restingBall) }
+        panel.leaveArena()
+        fetchSequence = nil
+        fetchPhase = nil
+        fetchIsThrowing = false
+        fetchBallAttached = false
+        ballExpiresAt = Date().addingTimeInterval(Self.ballLifetime)
+        behavior?.interact(.idle, at: Date())
+        animations?.play(.idle, restart: true)
     }
 
     private func save() {
