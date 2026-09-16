@@ -31,10 +31,16 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
+    <key>CFBundleIconFile</key><string>AppIcon.icns</string>
     <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>
 PLIST
+if [[ -f "$ROOT/Assets/AppIcon.icns" ]]; then
+  cp "$ROOT/Assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+else
+  echo "Warning: App icon not found at $ROOT/Assets/AppIcon.icns" >&2
+fi
 cp ".build/$CONF/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 chmod +x "$APP/Contents/MacOS/$APP_NAME"
 # Local game rips travel inside the bundle; they are git-ignored at mac/Assets.
