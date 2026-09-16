@@ -9,6 +9,10 @@ import SceneKit
     }
     let model = try ModelLoader.load(url, targetHeight: 1.0)
     #expect(model.skinnedMeshCount > 0, "rip should carry a skin controller")
+    #expect(model.eyeMaterials.isEmpty == false, "rig should expose its eye material")
+    #expect(model.eyeTextures.keys.sorted(by: { $0.rawValue < $1.rawValue })
+        == PetEyeState.allCases.sorted(by: { $0.rawValue < $1.rawValue }))
+    #expect(model.tongueTexture != nil)
     let (minB, maxB) = model.node.boundingBox
     #expect(abs(Double(maxB.y - minB.y) - 1.0) < 0.01)
     #expect(abs(Double(minB.y)) < 0.01, "feet on the floor")

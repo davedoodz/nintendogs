@@ -2,6 +2,10 @@ import SwiftUI
 import PetKit
 import Darwin
 
+private let expressionTailOwnedClips: Set<String> = [
+    "shiba_happy", "shiba_pet_react", "shiba_fetch_pickup",
+]
+
 @main
 struct NintendogsApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
@@ -101,7 +105,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             let loaded = try ModelLoader.load(url, targetHeight: SceneHost.dogHeight)
             let panel = PetPanel()
             self.panel = panel
-            try panel.sceneHost.setPet(loaded.node, rawHeight: loaded.rawHeight)
+            try panel.sceneHost.setPet(
+                loaded.node,
+                rawHeight: loaded.rawHeight,
+                eyeMaterials: loaded.eyeMaterials,
+                eyeTextures: loaded.eyeTextures,
+                tongueTexture: loaded.tongueTexture
+            )
             animations = try AnimationController(root: loaded.node)
             ambient = AmbientDirector(controller: animations!)
             panel.sceneHost.onCall = { [weak self] in self?.interact(.call) }
@@ -137,6 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                     // CPU at zero.
                     let busy = self?.isAiming == true
                         || self?.fetchSequence != nil
+                        || self?.panel?.sceneHost.expressionNeedsHighRate == true
                     let interval = active ? (busy ? 33 : 100) : 250
                     do { try await Task.sleep(for: .milliseconds(interval)) } catch { break }
                     guard let self else { break }
@@ -229,6 +240,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let dt = min(deltaTime, 0.1)
         let host = panel.sceneHost
         presenceTime += dt
+        let expressionActivity: PetActivity = fetchSequence == nil ? brain.state.activity : .fetch
+        let running = animations.currentClip == AnimationController.Locomotion.run.rawValue
+        let engaged = host.cursorAttention
+            || presenceTime - interactionTime < 8
+            || expressionActivity == .pet
+            || expressionActivity == .play
+            || expressionActivity == .call
+            || expressionActivity == .fetch
+        host.updateExpression(
+            deltaTime: dt,
+            targets: PetExpression.targets(
+                needs: brain.state.needs,
+                activity: previewing ? .sleep : expressionActivity,
+                engaged: engaged,
+                running: running
+            ),
+            tailSuppressed: expressionTailOwnedClips.contains(animations.currentClip)
+        )
         if isAiming {
             advanceAiming(by: dt, host: host, animations: animations)
             return
@@ -291,6 +320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             || previewing
             || host.isWandering
             || host.cursorAttention
+            || host.expressionNeedsHighRate
             || behavior?.isInteracting == true
             || animations.currentClip != "shiba_idle_loop"
     }

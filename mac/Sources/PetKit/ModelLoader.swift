@@ -4,6 +4,9 @@ public struct LoadedModel {
     public let node: SCNNode          // wrapper: feet at y=0, normalized height, centered on x/z
     public let rawHeight: CGFloat     // source units before scaling
     public let skinnedMeshCount: Int
+    public let eyeMaterials: [SCNMaterial]
+    public let eyeTextures: [PetEyeState: NSImage]
+    public let tongueTexture: NSImage?
 }
 
 public enum ModelLoader {
@@ -22,14 +25,20 @@ public enum ModelLoader {
         let content = SCNNode()
         for child in source.rootNode.childNodes { content.addChildNode(child) }
         var skinned = 0
+        var eyeMaterials: [SCNMaterial] = []
 
         let directory = url.deletingLastPathComponent()
         let stem = url.deletingPathExtension().lastPathComponent
+        let eyeTextures = Dictionary(uniqueKeysWithValues: PetEyeState.allCases.compactMap { state in
+            let filename = state == .open ? "eye_0.png" : "eye_\(state.rawValue).png"
+            return NSImage(contentsOf: directory.appendingPathComponent(filename)).map { (state, $0) }
+        })
         let textures = (
-            eye: NSImage(contentsOf: directory.appendingPathComponent("eye_0.png")),
+            eye: eyeTextures[.open],
             body: NSImage(contentsOf: directory.appendingPathComponent("\(stem)_all.png")),
             paw: NSImage(contentsOf: directory.appendingPathComponent("\(stem)_hand.png"))
         )
+        let tongue = NSImage(contentsOf: directory.deletingLastPathComponent().appendingPathComponent("tongue.png"))
         content.enumerateHierarchy { node, _ in
             if node.skinner != nil { skinned += 1 }
             for material in node.geometry?.materials ?? [] {
@@ -38,7 +47,9 @@ public enum ModelLoader {
                 material.multiply.contents = NSColor.white
                 material.isDoubleSided = true
                 let name = material.name?.lowercased() ?? ""
-                let texture: NSImage? = name.contains("eye")
+                let isEye = name.contains("eye")
+                if isEye { eyeMaterials.append(material) }
+                let texture: NSImage? = isEye
                     ? textures.eye
                     : name.contains("hand") ? textures.paw : textures.body
                 material.diffuse.contents = texture
@@ -59,6 +70,13 @@ public enum ModelLoader {
         let wrapper = SCNNode()
         wrapper.name = "pet"
         wrapper.addChildNode(content)
-        return LoadedModel(node: wrapper, rawHeight: height, skinnedMeshCount: skinned)
+        return LoadedModel(
+            node: wrapper,
+            rawHeight: height,
+            skinnedMeshCount: skinned,
+            eyeMaterials: eyeMaterials,
+            eyeTextures: eyeTextures,
+            tongueTexture: tongue
+        )
     }
 }

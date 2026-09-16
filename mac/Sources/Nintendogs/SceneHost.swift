@@ -9,24 +9,7 @@ private enum CameraLens {
     static let zFar: Double = 40
 }
 
-/// SceneKit evaluates transform constraints on its render queue. This snapshot is the
-/// intentionally tiny thread-safe bridge from main-actor cursor updates to that callback.
-private final class GazeSnapshot: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value = SCNVector3(0, 0, 0)
 
-    func store(_ newValue: SCNVector3) {
-        lock.lock()
-        value = newValue
-        lock.unlock()
-    }
-
-    func load() -> SCNVector3 {
-        lock.lock()
-        defer { lock.unlock() }
-        return value
-    }
-}
 
 /// Transparent SceneKit view with the DS-style fixed camera (KTD4), warm light and a blob shadow.
 final class SceneHost: SCNView {
@@ -135,7 +118,12 @@ final class SceneHost: SCNView {
     private weak var headNode: SCNNode?
     private var gazeYaw: CGFloat = 0
     private var gazePitch: CGFloat = 0
-    private let gazeSnapshot = GazeSnapshot()
+    private let gazeSnapshot = Locked(SCNVector3(0, 0, 0))
+
+    // MARK: Expression layers
+
+    private let expressionAnimator = ExpressionAnimator()
+    var expressionNeedsHighRate: Bool { expressionAnimator.needsHighRate }
 
     // MARK: Cursor presence
 
@@ -222,7 +210,13 @@ final class SceneHost: SCNView {
         configureBall(in: scene)
     }
 
-    func setPet(_ node: SCNNode, rawHeight: CGFloat) throws {
+    func setPet(
+        _ node: SCNNode,
+        rawHeight: CGFloat,
+        eyeMaterials: [SCNMaterial] = [],
+        eyeTextures: [PetEyeState: NSImage] = [:],
+        tongueTexture: NSImage? = nil
+    ) throws {
         guard let walk = AssetLocator.shibaClip(named: "shiba_walk_loop"),
               let run = AssetLocator.shibaClip(named: "shiba_run_loop") else {
             throw AssetLocator.MissingAsset(message: "Walking and running clips are required.")
@@ -240,6 +234,12 @@ final class SceneHost: SCNView {
         petRadius = hypot(x, z) + 0.06
         headNode = node.childNode(withName: "head", recursively: true)
         mouthNode = node.childNode(withName: "mouth", recursively: true)
+        expressionAnimator.configure(
+            root: node,
+            eyeMaterials: eyeMaterials,
+            eyeTextures: eyeTextures,
+            tongueTexture: tongueTexture
+        )
         attachGazeConstraint()
         setNeedsDisplay(bounds)
     }
@@ -873,6 +873,22 @@ final class SceneHost: SCNView {
         let depth = Double(-view.z)
         guard depth > frustum.near else { return 0 }
         return frustum.right * depth / frustum.near
+    }
+
+    // MARK: - Expression layers
+
+    func updateExpression(
+        deltaTime: TimeInterval,
+        targets: PetExpressionTargets,
+        tailSuppressed: Bool
+    ) {
+        expressionAnimator.update(
+            deltaTime: deltaTime,
+            targets: targets,
+            tailSuppressed: tailSuppressed,
+            mouthSuppressed: ballAttached
+        )
+        setNeedsDisplay(bounds)
     }
 
     // MARK: - Gaze

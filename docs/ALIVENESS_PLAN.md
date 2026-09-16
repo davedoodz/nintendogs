@@ -47,6 +47,10 @@ The imported rig faces **+Z**: head/mouth positions established this in a bundle
 
 Cursor location is polled without a global input monitor or Accessibility permission. Gaze is disabled during sleep, eating, drinking, and diagnostic preview. The animation picker remains under **Animation diagnostics**; it is not needed for normal use. **Personality** controls activity level and whether the dog explores the panel.
 
+Expression is layered independently from the authored body clip. `PetExpression` maps needs, immediate activity, recent engagement, and locomotion into calm/content/excited/alert/low/asleep targets. SceneKit composes non-incremental constraints on `tail2`, `tail3`, `chest`, `spin`, `waist`, both ears, and the mouth. Tail carriage, right-biased social wag, breathing, ear flicks, weight shifts, jaw panting, and tongue movement therefore continue while the body changes clips. Tail layering yields to clips that explicitly own the tail. Fast wag/pant states request a 30 Hz loop; passive content stays below 2 Hz with no pant so idle redraws remain at 10 Hz.
+
+The eye material now has coat-specific open/closed/squint/wide 32×32 textures. Petting closes the eyes and opens the jaw before showing a procedural tongue plane parented to the mouth joint; sleep closes the eyes and hides the tongue. Blinks run at randomized 3–7 second intervals when no state forces an eye expression.
+
 ## Presence rhythm
 
 After twenty minutes alone during the day, the dog settles into sitting; after twenty-five, it naps. A forty-five-minute cycle lets a fully rested unattended dog get up again rather than sleep forever. Critical hunger/thirst prevents this nap. Calling or caring wakes it and provides an awake grace period.
@@ -73,7 +77,9 @@ Checks cover all 24 clips actually changing bone transforms; viewport-edge pixel
 
 The first directional gaze snapshots did not exercise SceneKit's frame-to-frame constraint evaluation and missed a live cumulative head-spin defect. The corrected proof renders 3,600 continuous Metal frames with a held cursor, changing body yaw, 30 Hz scene updates, 60 Hz rendering, a sleeping neutral interval, and a stopped-animation interval. The gaze remained within **20.713°**, returned to **0.040°** during sleep, and moved the head joint origin by **0.000000**. A focused SceneKit reproduction measured the unsafe default at **60° after twelve 5° frames** versus **5°** with non-incremental evaluation. Evidence: `mac/build/gaze-spin-proof/metal-after/`.
 
-A 60-second real-time offscreen render at 720×480 with 4× MSAA measured **2.55% CPU**, averaging **27.2 fps** on the current M2 Max. This is an offscreen rendering measurement, not a long-duration live-window soak or a battery-life guarantee. The old static scene's 0.0% CPU result is not an animation-performance claim.
+The expression proof loads the bundled coat-B model and production textures, installs all eight additive constraints, renders 180 Metal frames across petting and sleep, and asserts that every constraint is non-incremental. It verifies all four eye textures load, the closed-eye image reaches the eye material during petting, the tongue becomes visible then hides during sleep, and the petting tail delta stays anatomically bounded at **15.05°**. A 10-second, 30 Hz high-expression render used **0.25 CPU-seconds over 11.56 wall-seconds** (about **2.2% CPU**) with a **67.3 MiB** maximum resident set.
+
+A 60-second real-time offscreen render of the broader aliveness system at 720×480 with 4× MSAA measured **2.55% CPU**, averaging **27.2 fps** on the current M2 Max. The expression-specific 30 Hz measurement above excludes 4× MSAA. Both are offscreen rendering measurements, not long-duration live-window soaks or battery-life guarantees. The old static scene's 0.0% CPU result is not an animation-performance claim.
 
 Swift Testing execution remains blocked by the local Xcode/Command Line Tools runtime/license state. Focused regression sources are retained; their syntax and the release build are checked, and the same risky transitions are exercised by bundled executables.
 
