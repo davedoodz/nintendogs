@@ -49,20 +49,21 @@
     "fresh_dae_max_vertex_error": 1.3058723390225556e-06
   },
   "shiba_fetch_carry_loop": {
-    "minimum_world_height": 0.023420892655849457,
-    "max_joint_step_degrees": 10.294309999107831,
+    "minimum_world_height": 0.0017133160727098584,
+    "max_joint_step_degrees": 12.730697386432972,
     "body_joint_max_degrees": {
       "tail1": 0,
       "neck": 0,
-      "Lleg1": 3.9966271362250163,
-      "Rleg1": 3.9966271362250163,
-      "Larm1": 3.999955572784928,
-      "Rarm1": 3.999955572784928
+      "Lleg1": 3.999955572784928,
+      "Rleg1": 3.912094580622823,
+      "Larm1": 3.8532209112982514,
+      "Rarm1": 3.968518346469475
     },
     "loop_endpoint_max_error": 0.0,
-    "root_matrix_range": 0.0,
-    "mouth_matrix_range": 9.5367431640625e-07,
-    "fresh_dae_max_vertex_error": 1.353957258653706e-06
+    "root_horizontal_max": 0.0,
+    "root_vertical_range": 0.01998305320739746,
+    "mouth_matrix_range": 7.450580596923828e-07,
+    "fresh_dae_max_vertex_error": 1.6795400146967615e-06
   },
   "shiba_look_around_loop": {
     "minimum_world_height": -0.0015789568424224854,

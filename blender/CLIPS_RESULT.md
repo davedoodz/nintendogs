@@ -1,8 +1,9 @@
 # Clip sets: accepted base tier and second-tier authoring results
 
 The 12 base clips below were accepted by the user before second-tier authoring.
-Their DAEs and working blend have not been regenerated or changed. The second
-tier is documented after the base-tier rebuild instructions.
+The storyboard pass below rebuilds walk/run/carry; other accepted pose functions
+remain unchanged in that pass. Later tiers are documented after the base-tier
+rebuild instructions. Blender-side changes require renewed Mac playback review.
 
 All files are in `mac/Assets/shiba/clips/`. All use 30 fps, one action per DAE,
 sampled matrix transforms at every frame, unit scale 1 and the contract's
@@ -17,8 +18,8 @@ for editing; its active action is `shiba_idle_loop`.
 | `shiba_lie_down` | 75 | Seated to lying; elbows and distal hind legs fold |
 | `shiba_sleep_loop` | 150 | Head-rest pose and slow breathing |
 | `shiba_eat_loop` | 90 | Head lowered, four jaw-chewing cycles |
-| `shiba_walk_loop` | 40 | Four-phase foot cycle, in place, fixed root |
-| `shiba_run_loop` | 28 | Faster diagonal pairs, larger steps, fixed root |
+| `shiba_walk_loop` | 40 | Lateral four-beat, 0.65 duty, linear stance, vertical bob |
+| `shiba_run_loop` | 28 | Diagonal pairs, 0.55 duty, larger steps and suspension |
 | `shiba_bark` | 60 | Two jaw openings with head/ear recoil; neutral ending |
 | `shiba_fetch_pickup` | 75 | Head dip, jaw opens then closes, head returns |
 | `shiba_happy` | 75 | Horizontal distal tail wag, two small bounces |
@@ -30,7 +31,7 @@ for editing; its active action is `shiba_idle_loop`.
 stay at or below 7 degrees; their rotations are checked on every frame. The
 larger movements use `tail2`/`tail3`, `head`, knees, elbows, hocks and paws.
 Root motion for sit/lie/stretch moves the whole dog, preserving the torso joins.
-Walk and run do not translate or rotate the root. Their two-link foot solver
+Walk and run translate the root vertically only and never rotate it. Their two-link foot solver
 reserves a bend at the knee/elbow to avoid a straight-limb snapping artifact.
 
 Non-locomotion poses receive a whole-rig vertical correction when needed to
@@ -105,7 +106,7 @@ extended to 24 entries in the same commit as these assets.
 
 All six constrained joints stay below 7° on every sampled frame; the measured
 maximum in this tier is approximately 5°. `tail1` stays stationary. Carry's
-root remains fixed, and all channels except head/mouth match the accepted walk.
+root shares the walk's vertical bob, and all channels except head/mouth match walk.
 Drink has six laps in 60 frames, versus eat's four chews in 90 frames.
 
 ### Scratch reach limitation
@@ -147,3 +148,61 @@ source-basis conversion are unchanged from the accepted pipeline. Constant pose
 channels are retained for holds and state resets. Mac playback review of this
 second tier remains pending. Changes are confined to `blender/`, the clips
 directory, and the explicitly requested contract-table update.
+
+## Storyboard gait rebuild
+
+Walk and carry now use LH/LF/RH/RF swing offsets 0/.25/.50/.75, 0.65 duty,
+fore/hind stride .17/.23 and lift .10/.13. Run uses diagonal offsets 0/.5,
+0.55 duty, stride .24/.32 and lift .16/.20. The two-link IK and 0.96 bend
+reserve remain; targets undo the torso transform before solving, and use
+toe-mesh clearance to keep the pivot above the floor during toe-down/toe-off.
+Body, ear, head and tail motion follow the storyboard; the tail base is still.
+Carry is rebuilt from this walk, differing only on head and mouth channels.
+
+The root-basis probe measured `(0, -0.610000014, 0)` for SIT's source offset:
+Y is vertical, mapping to Blender world Z. Exported horizontal root range is
+exactly zero. Vertical range is .019983053 for walk/carry and .059870958 for run.
+Maximum gait seam angle is approximately 6 degrees (run); walk/carry are 4.
+No export limit or verifier assertion was relaxed.
+
+Independent exported `skl_root/waist/Lleg1/Lleg2/Lfoot1/Lfoot2` composition,
+using the Mac's lowest-25%-height contact selection:
+
+| Clip | Contact Z decrease | Z increase | Speed (source units/s) |
+| --- | ---: | ---: | ---: |
+| walk | .181449056 | 0 | .272173584 |
+| run | .215487599 | 0 | .646462798 |
+| carry | .181449056 | 0 | .272173584 |
+
+`gait_direction_validation.json` preserves these measurements after deleting
+the temporary probe. Walk speed varies .260864–.283452 across measured contact
+intervals because waist roll/yaw and the retained planar IK affect the final
+projection; the commanded stance path is linear. Run is .646437–.646484.
+`gait_geometry_validation.json` records the root-basis proof and paw clearances.
+Walk frames 1/7/17/27 each have three paws within .004 of the floor. Run frame
+14 has all four paws .041688 above it. These floor-backed renders were inspected.
+Walk/run/carry loop, floor, <20-degree frame-step, and fresh-import checks pass;
+base and tier-2 authoring commands completed with renders enabled and both
+verification commands exited zero. Export settings and geometry remain unchanged.
+
+## Open issues
+
+- The specified 0.65 walk duty with quarter-cycle offsets produces three-paw
+  support for 60% of the cycle and two-paw support for 40%, not three at every
+  instant. The exact requested phase schedule is retained; the reviewed frames
+  have three supporting paws.
+- The specified run phases mathematically overlap in stance at .45–.50 and
+  .95–1, rather than creating suspension themselves. Positive body bob is also
+  applied to foot-target height, creating visible suspension without changing
+  the supplied phase schedule. Actual ground-contact duty is therefore shorter
+  than the nominal .55 path duty.
+- Forepaws need an 11-degree toe-down baseline to reach the floor with the
+  mandatory 4% IK bend reserve. The specified 15-degree landing and 20-degree
+  toe-off ramps are added to that baseline. Those ramps unwind over the first
+  12% of stance / 20% of swing, avoiding discontinuous boundary jumps.
+- A pure half-frequency head yaw cannot repeat smoothly in a one-cycle walk
+  asset. A periodic, envelope-shaped left/right drift reaching +/-2 degrees
+  replaces it; the first/last pose is exact. Mood/gaze remain runtime-owned.
+- The short-stride values supplied here measure slower than the storyboard's
+  illustrative 0.7-body-heights/s figure. They are not silently multiplied;
+  Mac GaitStride should use the measured contact speed.

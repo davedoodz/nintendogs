@@ -1,0 +1,26 @@
+{
+  "shiba_walk_loop": {
+    "z_decrease": 0.1814490556716919,
+    "z_increase": 0,
+    "contact_speed": 0.27217358350753784,
+    "contact_speed_min": 0.2608644962310791,
+    "contact_speed_max": 0.28345227241516113,
+    "contact_intervals": 20
+  },
+  "shiba_run_loop": {
+    "z_decrease": 0.21548759937286377,
+    "z_increase": 0,
+    "contact_speed": 0.6464627981185913,
+    "contact_speed_min": 0.646437406539917,
+    "contact_speed_max": 0.6464838981628418,
+    "contact_intervals": 10
+  },
+  "shiba_fetch_carry_loop": {
+    "z_decrease": 0.1814490556716919,
+    "z_increase": 0,
+    "contact_speed": 0.27217358350753784,
+    "contact_speed_min": 0.2608644962310791,
+    "contact_speed_max": 0.28345227241516113,
+    "contact_intervals": 20
+  }
+}

@@ -8,7 +8,7 @@ import argparse
 import math
 from pathlib import Path
 import sys
-from mathutils import Vector
+from mathutils import Vector, Quaternion
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from clip_pipeline import Rig, WORK, write_report, matrix_error, positions
 
@@ -138,28 +138,69 @@ def wrap(angle):
 
 
 def gait(rig, t, running=False):
-    # Four-beat walk, diagonal-pair trot/run. No root translation or rotation.
-    phases = {"Larm": 0, "Rarm": .5, "Lleg": .5 if running else .75, "Rleg": 0 if running else .25}
-    p = {"head": ((2 if running else 1) * math.sin(TAU * 2 * t), 0, 0)}
+    # Source +Y is vertical (checked against SIT's -0.61 root offset).
+    phases = ({"Larm": 0, "Rarm": .5, "Lleg": .5, "Rleg": 0} if running
+              else {"Lleg": 0, "Larm": .25, "Rleg": .5, "Rarm": .75})
+    swing = .45 if running else .35
+    bob_wave = math.cos(TAU * 2 * (t - (.47 if running else .10)))
+    bob = .01 + .03 * bob_wave if running else .002 + .01 * bob_wave
+    spin = -.5 - 2.5 * bob_wave if running else bob_wave
+    p = {"root_location": (0, bob, 0), "spin": (spin, 0, 0),
+         "waist": (-spin / 2, 0, 0) if running else (0, -2 * math.sin(TAU*t), 2 * math.cos(TAU*t)),
+         "neck": (0, 0, 0),
+         "head": ((-.5 - 3.5*bob_wave, 0, 0) if running
+                  else (1 + bob_wave, 3*math.sqrt(3)/2 * math.sin(math.pi*t) * math.sin(TAU*t), 0)),
+         "Lear1": (-6 if running else 3, 0, 0),
+         "Rear1": (-6 if running else 3, 0, 0),
+         "mouth": (8 if running else 0, 0, 0),
+         "tail2": (-10 if running else -8, (8 if running else -5) * math.sin(TAU*(t-.15)), 0),
+         "tail3": (-14, (3 if running else -3) * math.sin(TAU*(t-.30)), 0)}
     for limb, offset in phases.items():
-        phase = TAU * (t + offset)
-        p[limb + "1"] = ((7 if running else 4) * math.cos(phase), 0, 0)
+        u = (t + 1 - offset) % 1
+        # Negative pitch swings the foot forward; both pieces meet continuously.
+        travel = (-1 + 2*u/swing) if u < swing else (1 - 2*(u-swing)/(1-swing))
+        p[limb + "1"] = (-(6 if running else 4) * travel, 0, 0)
     rig.set_pose(p)
-    anchors = {limb: rig.arm.pose.bones[limb + "2"].matrix.translation.copy() for limb in phases}
     for limb, offset in phases.items():
         fore = "arm" in limb
         mid = limb[0] + ("hand1" if fore else "foot1")
         toe = limb[0] + ("hand2" if fore else "foot2")
         joint = limb + "2"
-        phase = TAU * (t + offset)
+        u = (t + 1 - offset) % 1
         stride = (.24 if fore else .32) if running else (.17 if fore else .23)
-        lift = (.18 if running else .12) * max(0, math.sin(phase)) ** 2
+        height = (.16 if fore else .20) if running else (.10 if fore else .13)
+        if u < swing:
+            s = u / swing
+            travel = s - .5
+            lift = height * math.sin(math.pi * s**.8)
+            toe_pitch = 15 * ease((s-.8)/.2) + 20 * (1-ease(s/.20))
+        else:
+            q = (u-swing)/(1-swing)
+            travel = .5 - q  # Linear -Z slide while planted.
+            lift = 0
+            toe_pitch = 20 * ease((q-.85)/.15) + 15 * (1-ease(q/.12))
+        # The short forelimb needs a modest toe-down baseline to retain the
+        # mandated 4% knee reserve while reaching the floor.
+        if fore:
+            toe_pitch += 11
         target = rig.rest[toe].translation.copy()
-        # The rig faces +Z. A planted paw must travel -Z during contact (lift == 0,
-        # sin(phase) <= 0) so the app's +Z root travel reads as forward, not a moonwalk.
-        target.z -= stride * math.cos(phase)
-        target.y += lift + .025
-        anchor = anchors[limb]
+        target.z -= stride * -travel
+        # Undo the torso transform before the unchanged planar two-link solve.
+        # Otherwise waist yaw/roll and the bob would drag a planted paw sideways.
+        parent = rig.arm.pose.bones[limb + "1"].parent
+        body = parent.matrix @ rig.rest[parent.name].inverted()
+        if not hasattr(rig, "paw_offsets"):
+            source_points = [rig.arm.matrix_world.inverted() @ v for v in rig.rest_points]
+            rig.paw_offsets = {name: [point-rig.rest[name].translation
+                                     for point, vertex in zip(source_points, rig.mesh.data.vertices)
+                                     if rig.mesh.vertex_groups[vertex.groups[0].group].name == name]
+                               for name in ("Lhand2", "Rhand2", "Lfoot2", "Rfoot2")}
+        paw_rotation = body.to_quaternion() @ Quaternion((1, 0, 0), math.radians(toe_pitch))
+        # Toe-down/toe-off need pivot clearance, not a whole-body floor correction.
+        target.y = (.002 - min((paw_rotation @ v).y for v in rig.paw_offsets[toe])
+                    + lift + (max(0, bob) if running else 0))
+        target = body.inverted() @ target
+        anchor = body.inverted() @ rig.arm.pose.bones[joint].matrix.translation
         delta = target - anchor
         v1 = rig.rest[mid].translation - rig.rest[joint].translation
         v2 = rig.rest[toe].translation - rig.rest[mid].translation
@@ -176,10 +217,19 @@ def gait(rig, t, running=False):
         pitch_mid = wrap(-math.degrees(beta - math.atan2(v2.y, v2.z)) - parent_pitch - pitch2)
         p[joint] = (pitch2, 0, 0)
         p[mid] = (pitch_mid, 0, 0)
-        p[toe] = (-parent_pitch - pitch2 - pitch_mid, 0, 0)
-    p["tail2"] = (8, (7 if running else 4) * math.sin(TAU * t), 0)
-    p["tail3"] = (12, 3 * math.sin(TAU * t), 0)
+        p[toe] = (-parent_pitch - pitch2 - pitch_mid + toe_pitch, 0, 0)
     return p
+
+
+def root_motion(samples):
+    """Exported source basis: +Y up, X/Z horizontal; no app-owned travel."""
+    rest = samples["skl_root"][0].translation
+    offsets = [m.translation-rest for m in samples["skl_root"]]
+    horizontal = max(max(abs(v.x), abs(v.z)) for v in offsets)
+    vertical = max(v.y for v in offsets)-min(v.y for v in offsets)
+    assert horizontal < 1e-6, horizontal
+    assert vertical <= .06, vertical
+    return dict(root_horizontal_max=horizontal, root_vertical_range=vertical)
 
 
 def build(render=True):
@@ -191,8 +241,8 @@ def build(render=True):
         ("shiba_lie_down", 75, lie_down, False, [1, 38, 75]),
         ("shiba_sleep_loop", 150, sleep, True, [1, 39, 76]),
         ("shiba_eat_loop", 90, eat, True, [1, 12, 23]),
-        ("shiba_walk_loop", 40, lambda t: gait(rig, t), True, [1, 11, 21]),
-        ("shiba_run_loop", 28, lambda t: gait(rig, t, True), True, [1, 8, 15]),
+        ("shiba_walk_loop", 40, lambda t: gait(rig, t), True, [1, 7, 17, 27]),
+        ("shiba_run_loop", 28, lambda t: gait(rig, t, True), True, [1, 7, 14, 20]),
         ("shiba_bark", 60, bark, False, [1, 16, 35]),
         ("shiba_fetch_pickup", 75, fetch, False, [1, 31, 41]),
         ("shiba_happy", 75, happy, False, [1, 24, 45]),
@@ -207,9 +257,7 @@ def build(render=True):
             assert error < 2e-5, ("Loop discontinuity", name, error)
             report["loop_endpoint_max_error"] = error
         if name in {"shiba_walk_loop", "shiba_run_loop"}:
-            rest = samples["skl_root"][0].translation
-            assert max((m.translation - rest).length for m in samples["skl_root"]) < 1e-6
-            report["root_translation_range"] = 0
+            report.update(root_motion(samples))
         report["loop"] = looping
         reports.append(report)
         channels[name] = samples
@@ -234,12 +282,13 @@ def build(render=True):
         for name, frames, fn, looping, previews in specs:
             rig.activate(rig.actions[name])
             for frame in previews:
-                rig.render(directory / f"{name}_{frame:03d}.png", frame, side_view=True)
+                from review_render import render_review
+                render_review(rig, directory / f"{name}_{frame:03d}.png", frame)
             print("PREVIEW_DONE", name, flush=True)
         proof_directory = WORK / "previews"
         proof_directory.mkdir(exist_ok=True)
         for name, frame in [("shiba_sit", 60), ("shiba_sleep_loop", 1),
-                            ("shiba_walk_loop", 11), ("shiba_stretch", 41)]:
+                            ("shiba_walk_loop", 7), ("shiba_run_loop", 14), ("shiba_stretch", 41)]:
             rig.activate(rig.actions[name])
             rig.render(proof_directory / (name + ".png"), frame, side_view=True)
 

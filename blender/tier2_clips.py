@@ -4,7 +4,7 @@ Accepted base clips are read for entry/exit pose checks and never regenerated.
 """
 import hashlib
 import math
-from author_clips import SIT, LIE, TAU, ease, pulse, blend, add, gait
+from author_clips import SIT, LIE, TAU, ease, pulse, blend, add, gait, root_motion
 from clip_pipeline import Rig, WORK, CLIPS, matrix_error, read_clip_channels, write_report
 
 # Frames, loop flag, incoming state's first frame, outgoing state's first frame.
@@ -152,7 +152,7 @@ def build_tier2(render=True):
                              for a, b in zip(samples[joint], references["shiba_walk_loop"][joint]))
             assert gait_error < 2e-5
             report["accepted_walk_channel_max_error"] = gait_error
-            assert max(matrix_error(samples["skl_root"][0], m) for m in samples["skl_root"]) < 1e-6
+            report.update(root_motion(samples))
         reports.append(report)
         print("TIER2_PASS", name, frames, flush=True)
     assert base_hashes == {name: hashlib.sha256((CLIPS / name).read_bytes()).hexdigest() for name in base_hashes}
@@ -170,7 +170,8 @@ def build_tier2(render=True):
                 rig.render(directory / f"{name}_{frame:03d}.png", frame, side_view=True)
             print("TIER2_PREVIEW", name, flush=True)
         for name, frame in [("shiba_sit_from_lie", 34), ("shiba_beg_loop", 23),
-                            ("shiba_shake", 18), ("shiba_pet_react", 30), ("shiba_scratch", 37)]:
+                            ("shiba_shake", 18), ("shiba_pet_react", 30), ("shiba_scratch", 37),
+                            ("shiba_fetch_carry_loop", 7)]:
             rig.activate(rig.actions[name])
             rig.render(WORK / "previews" / (name + ".png"), frame, side_view=True)
         rig.activate(rig.actions["shiba_shake"])

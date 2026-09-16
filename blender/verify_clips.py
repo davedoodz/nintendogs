@@ -6,6 +6,7 @@ import bpy
 from mathutils import Vector
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from clip_pipeline import WORK, CLIPS, positions, write_report, BODY_JOINTS, read_clip_channels, matrix_error
+from author_clips import root_motion
 
 tier2 = "--tier2" in sys.argv
 if tier2:
@@ -61,12 +62,13 @@ for action in list(bpy.data.actions):
                 assert error < 2e-5, (action.name, endpoint, error)
                 reports[action.name][endpoint] = dict(state=state, max_matrix_error=error)
         if action.name == "shiba_fetch_carry_loop":
-            root_error = max(matrix_error(channels["skl_root"][0], m) for m in channels["skl_root"])
-            assert root_error < 1e-6
+            reports[action.name].update(root_motion(channels))
             mouth_error = max(matrix_error(channels["mouth"][0], m) for m in channels["mouth"])
             assert mouth_error < 2e-5
-            reports[action.name]["root_matrix_range"] = root_error
             reports[action.name]["mouth_matrix_range"] = mouth_error
+    if action.name in {"shiba_walk_loop", "shiba_run_loop"}:
+        reports[action.name].update(root_motion(read_clip_channels(CLIPS / (action.name + ".dae"))))
+    assert max(body_limits.values()) < (7 if tier2 else 10), (action.name, body_limits)
     assert floor_min > -.003, ("Floor penetration", action.name, floor_min)
     assert max_step < 20, ("Joint motion discontinuity", action.name, max_step)
     print("POSE_CHECK", action.name, reports[action.name], flush=True)

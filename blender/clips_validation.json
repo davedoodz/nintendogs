@@ -471,12 +471,12 @@
       "body_joint_max_degrees": {
         "tail1": 0,
         "neck": 0,
-        "Lleg1": 3.9966271362250163,
-        "Rleg1": 3.9966271362250163,
-        "Larm1": 3.999955572784928,
-        "Rarm1": 3.999955572784928
+        "Lleg1": 3.999955572784928,
+        "Rleg1": 3.912094580622823,
+        "Larm1": 3.8532209112982514,
+        "Rarm1": 3.968518346469475
       },
-      "native_sample_max_matrix_error": 8.344650268554688e-07,
+      "native_sample_max_matrix_error": 1.2814998626708984e-06,
       "source_geometry_skin_bind_hierarchy_preserved": true,
       "mesh_data_unchanged": true,
       "export_settings": {
@@ -500,7 +500,8 @@
       "final_up_axis": "Y_UP",
       "source_sha256": "ca63f32a333cb5f04da83fd5b124156323cc12ec2ff08b94c3461f4f7161f339",
       "loop_endpoint_max_error": 0.0,
-      "root_translation_range": 0,
+      "root_horizontal_max": 0.0,
+      "root_vertical_range": 0.01998305320739746,
       "loop": true
     },
     {
@@ -544,12 +545,12 @@
       "body_joint_max_degrees": {
         "tail1": 0,
         "neck": 0,
-        "Lleg1": 7.0000124322150095,
-        "Rleg1": 7.0000124322150095,
-        "Larm1": 7.0000124322150095,
-        "Rarm1": 7.0000124322150095
+        "Lleg1": 5.717107391921623,
+        "Rleg1": 6.0000535278181015,
+        "Larm1": 6.0000535278181015,
+        "Rarm1": 5.717107391921623
       },
-      "native_sample_max_matrix_error": 8.344650268554688e-07,
+      "native_sample_max_matrix_error": 9.5367431640625e-07,
       "source_geometry_skin_bind_hierarchy_preserved": true,
       "mesh_data_unchanged": true,
       "export_settings": {
@@ -573,7 +574,8 @@
       "final_up_axis": "Y_UP",
       "source_sha256": "ca63f32a333cb5f04da83fd5b124156323cc12ec2ff08b94c3461f4f7161f339",
       "loop_endpoint_max_error": 0.0,
-      "root_translation_range": 0,
+      "root_horizontal_max": 0.0,
+      "root_vertical_range": 0.05987095832824707,
       "loop": true
     },
     {

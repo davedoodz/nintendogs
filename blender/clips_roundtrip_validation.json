@@ -30,9 +30,11 @@
     "fresh_dae_max_vertex_error": 1.7532785034278307e-06
   },
   "shiba_run_loop": {
-    "minimum_world_height": 0.02342088334262371,
-    "max_joint_step_degrees": 18.75240218703319,
-    "fresh_dae_max_vertex_error": 1.5222540842440288e-06
+    "minimum_world_height": 0.001999898115172982,
+    "max_joint_step_degrees": 16.636624733122094,
+    "root_horizontal_max": 0.0,
+    "root_vertical_range": 0.05987095832824707,
+    "fresh_dae_max_vertex_error": 1.678746593655069e-06
   },
   "shiba_sit": {
     "minimum_world_height": -0.0015793540515005589,
@@ -55,8 +57,10 @@
     "fresh_dae_max_vertex_error": 1.8352036855626884e-06
   },
   "shiba_walk_loop": {
-    "minimum_world_height": 0.023420892655849457,
-    "max_joint_step_degrees": 10.294309999107831,
-    "fresh_dae_max_vertex_error": 1.5497207641601562e-06
+    "minimum_world_height": 0.0017133160727098584,
+    "max_joint_step_degrees": 12.730697386432972,
+    "root_horizontal_max": 0.0,
+    "root_vertical_range": 0.01998305320739746,
+    "fresh_dae_max_vertex_error": 1.6795400146967615e-06
   }
 }
