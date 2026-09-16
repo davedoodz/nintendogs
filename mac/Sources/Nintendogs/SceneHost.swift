@@ -9,6 +9,25 @@ private enum CameraLens {
     static let zFar: Double = 40
 }
 
+/// SceneKit evaluates transform constraints on its render queue. This snapshot is the
+/// intentionally tiny thread-safe bridge from main-actor cursor updates to that callback.
+private final class GazeSnapshot: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = SCNVector3(0, 0, 0)
+
+    func store(_ newValue: SCNVector3) {
+        lock.lock()
+        value = newValue
+        lock.unlock()
+    }
+
+    func load() -> SCNVector3 {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}
+
 /// Transparent SceneKit view with the DS-style fixed camera (KTD4), warm light and a blob shadow.
 final class SceneHost: SCNView {
     static let dogHeight: CGFloat = 1.0
@@ -102,7 +121,7 @@ final class SceneHost: SCNView {
     private weak var headNode: SCNNode?
     private var gazeYaw: CGFloat = 0
     private var gazePitch: CGFloat = 0
-    private let gazeOffset = SCNNode()
+    private let gazeSnapshot = GazeSnapshot()
 
     // MARK: Cursor presence
 
@@ -685,10 +704,9 @@ final class SceneHost: SCNView {
     /// `docs/ANIMATION_CONTRACT.md` still holds: no bone is re-targeted).
     private func attachGazeConstraint() {
         guard let head = headNode else { return }
-        let offset = gazeOffset
-        let constraint = SCNTransformConstraint(inWorldSpace: true) { _, transform in
-            // The render callback reads SceneKit-owned state, not mutable view fields.
-            let angles = offset.eulerAngles
+        let snapshot = gazeSnapshot
+        let transformBlock: @Sendable (SCNNode, SCNMatrix4) -> SCNMatrix4 = { _, transform in
+            let angles = snapshot.load()
             let yaw = SCNMatrix4MakeRotation(angles.y, 0, 1, 0)
             let pitch = SCNMatrix4MakeRotation(-angles.x, cos(angles.z), 0, -sin(angles.z))
             var result = SCNMatrix4Mult(transform, SCNMatrix4Mult(yaw, pitch))
@@ -698,6 +716,7 @@ final class SceneHost: SCNView {
             result.m43 = transform.m43
             return result
         }
+        let constraint = SCNTransformConstraint(inWorldSpace: true, with: transformBlock)
         head.constraints = [constraint]
     }
 
@@ -716,7 +735,7 @@ final class SceneHost: SCNView {
         gazePitch = CGFloat(easedAngle(
             current: Double(gazePitch), target: Double(targetPitch), tau: Self.gazeEaseTau, deltaTime: deltaTime
         ))
-        gazeOffset.eulerAngles = SCNVector3(gazePitch, gazeYaw, petAnchor.eulerAngles.y)
+        gazeSnapshot.store(SCNVector3(gazePitch, gazeYaw, petAnchor.eulerAngles.y))
     }
 
     /// Aims at the cursor unprojected to a point at the pet's current depth
