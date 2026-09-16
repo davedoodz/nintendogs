@@ -1,0 +1,89 @@
+{
+  "result": "GO: Blender import, Pose Mode deformation and sampled export passed; SceneKit playback pending Mac validation",
+  "blender": "4.2.23 LTS",
+  "source_sha256": "ca63f32a333cb5f04da83fd5b124156323cc12ec2ff08b94c3461f4f7161f339",
+  "bones": 28,
+  "hierarchy_matches_source": true,
+  "source_hierarchy": {
+    "skl_root": null,
+    "waist": "skl_root",
+    "tail1": "waist",
+    "tail2": "tail1",
+    "tail3": "tail2",
+    "Lleg1": "waist",
+    "Lleg2": "Lleg1",
+    "Lfoot1": "Lleg2",
+    "Lfoot2": "Lfoot1",
+    "Rleg1": "waist",
+    "Rleg2": "Rleg1",
+    "Rfoot1": "Rleg2",
+    "Rfoot2": "Rfoot1",
+    "spin": "skl_root",
+    "Larm1": "spin",
+    "Larm2": "Larm1",
+    "Lhand1": "Larm2",
+    "Lhand2": "Lhand1",
+    "Rarm1": "spin",
+    "Rarm2": "Rarm1",
+    "Rhand1": "Rarm2",
+    "Rhand2": "Rhand1",
+    "chest": "spin",
+    "neck": "chest",
+    "head": "neck",
+    "Rear1": "head",
+    "Lear1": "head",
+    "mouth": "head"
+  },
+  "contract_diagram_discrepancies": {
+    "spin": "source parent skl_root; diagram waist",
+    "Larm1": "source parent spin; diagram chest",
+    "Rarm1": "source parent spin; diagram chest"
+  },
+  "vertices": 1140,
+  "rest_pose_max_error": 2.5288109106536417e-07,
+  "pose_mode_test": {
+    "bone": "tail1",
+    "rotation_degrees": 20,
+    "axis": "local Y",
+    "moved_vertices": 58,
+    "tail_weighted_vertices": 58,
+    "non_tail_vertices_moved": 0,
+    "max_displacement": 0.5037781927863606
+  },
+  "mesh_uv_weights_materials_transforms_unchanged": true,
+  "frame_range": [
+    1,
+    30
+  ],
+  "fps": 30,
+  "actions": [
+    "shiba_test_tailwag"
+  ],
+  "tail_channel_samples": 30,
+  "sample_time_range_seconds": [
+    0.0333333,
+    1.0
+  ],
+  "export_settings": {
+    "selected": true,
+    "include_animations": true,
+    "include_all_actions": false,
+    "export_animation_type_selection": "sample",
+    "sampling_rate": 1,
+    "keep_keyframes": false,
+    "keep_smooth_curves": false,
+    "export_object_transformation_type_selection": "matrix",
+    "export_animation_transformation_type_selection": "matrix",
+    "export_global_up_selection": "Y",
+    "export_global_forward_selection": "-Z",
+    "apply_global_orientation": true,
+    "apply_modifiers": false,
+    "triangulate": false,
+    "use_texture_copies": false
+  },
+  "export_up_axis": "Z_UP",
+  "exporter_note": "Blender 4.2 writes Z_UP metadata even with Y-up/-Z-forward export selectors. Apply Global Orientation enabled for consistent exported rest and animation matrices; no transforms applied to the working model. Only image paths normalized to relative references after export.",
+  "export_channels": [
+    "Armature_tail1/transform"
+  ]
+}
