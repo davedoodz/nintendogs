@@ -144,6 +144,9 @@ public final class AmbientDirector {
         isSuppressedNow = suppressed
         guard !suppressed else {
             wasSuppressed = true
+            stirPhase = .none
+            sitVariationPhase = .none
+            greetPhase = .none
             return
         }
         if wasSuppressed {

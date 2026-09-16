@@ -42,3 +42,17 @@ private func controllerForShiba() throws -> AnimationController {
     for _ in 0..<120 { controller.update(deltaTime: 1.0 / 30) }
     #expect(controller.currentClip == "shiba_eat_loop")
 }
+
+@Test @MainActor func mealCancelsAnUnstartedGreeting() throws {
+    let controller = try controllerForShiba()
+    let director = AmbientDirector(controller: controller, seed: 1)
+    director.greet()
+    controller.play(.eat)
+    director.update(deltaTime: 0.1, needs: PetNeeds(), activity: .eat, careRequest: false, suppressed: true)
+    controller.play(.idle)
+    for _ in 0..<60 {
+        director.update(deltaTime: 1.0 / 30, needs: PetNeeds(), activity: .idle, careRequest: false, suppressed: false)
+        controller.update(deltaTime: 1.0 / 30)
+        #expect(controller.currentClip == "shiba_idle_loop")
+    }
+}
