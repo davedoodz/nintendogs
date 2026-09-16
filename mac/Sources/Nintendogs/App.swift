@@ -347,6 +347,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         if fetchIsThrowing {
             if host.advanceBallThrow(by: dt), let sequence = fetchSequence {
                 fetchIsThrowing = false
+                panel?.enableArenaInteractions()
                 behavior?.interact(.fetch, at: Date(), duration: sequence.totalDuration)
                 refresh()
             }

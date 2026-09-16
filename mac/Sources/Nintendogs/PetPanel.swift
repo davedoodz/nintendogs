@@ -57,6 +57,13 @@ final class PetPanel: NSPanel {
         setFrame(arena, display: true)
     }
 
+    /// Once the throw overlay is gone, let dog gestures cancel the active fetch. The arena
+    /// remains nonactivating; clicks outside the rendered dog are simply ignored by SceneHost.
+    func enableArenaInteractions() {
+        guard isInArena else { return }
+        ignoresMouseEvents = false
+    }
+
     /// Reverses `enterArena` in the opposite order.
     func leaveArena() {
         guard let home = arenaHomeFrame else { return }
