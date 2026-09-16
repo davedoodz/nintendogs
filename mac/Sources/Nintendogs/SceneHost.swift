@@ -2,12 +2,27 @@ import SceneKit
 import AppKit
 import PetKit
 
+/// Fixed DS-style lens. File scope so the frustum maths below is not main-actor bound.
+private enum CameraLens {
+    static let fieldOfView: Double = 38
+    static let zNear: Double = 0.05
+    static let zFar: Double = 40
+}
+
 /// Transparent SceneKit view with the DS-style fixed camera (KTD4), warm light and a blob shadow.
 final class SceneHost: SCNView {
     static let dogHeight: CGFloat = 1.0
     /// Camera values ported from the web study (`src/scene.js`), rescaled for a 1-unit dog.
     private static let cameraPosition = SCNVector3(0, 0.78, 2.3)
     private static let cameraLook = SCNVector3(0, 0.48, 0)
+
+    /// Fetch arena clamps (KTD6). A throw lands no farther than `arenaZFar`; rays that pass
+    /// above the horizon — most of the display, since the camera looks only ~7 degrees down —
+    /// are pulled onto that depth, so higher on screen reads as farther away. `arenaXLimit`
+    /// keeps the ball on the display at that depth.
+    static let arenaZFar: Double = -8
+    static let arenaZNear: Double = 0.6
+    static let arenaXLimit: Double = 6
 
     /// Depth band wander targets are picked within, either side of the
     /// camera's look-at plane (`docs/ALIVENESS_PLAN.md` Phase 2: "z within
@@ -47,6 +62,13 @@ final class SceneHost: SCNView {
     private let bowl = SCNNode()
     private let bowlContents = SCNNode()
     private var displayedActivity: PetActivity?
+
+    /// Held as a property so the arena can retarget the projection and turn screen points
+    /// into ground points (KTD4, KTD6).
+    private let cameraNode = SCNNode()
+    /// The frustum forced onto the camera while the panel is expanded to the arena.
+    /// `nil` means the ordinary home projection is in effect.
+    private var arenaFrustum: Frustum?
 
     // MARK: Wander / root motion
 
@@ -102,10 +124,9 @@ final class SceneHost: SCNView {
         setAnimationActive(false)    // render on demand until animation exists (idle CPU budget)
 
         let camera = SCNCamera()
-        camera.fieldOfView = 38
-        camera.zNear = 0.05
-        camera.zFar = 40
-        let cameraNode = SCNNode()
+        camera.fieldOfView = CGFloat(CameraLens.fieldOfView)
+        camera.zNear = CameraLens.zNear
+        camera.zFar = CameraLens.zFar
         cameraNode.camera = camera
         cameraNode.position = Self.cameraPosition
         cameraNode.look(at: Self.cameraLook)
@@ -349,6 +370,152 @@ final class SceneHost: SCNView {
         if clamped != petAnchor.position.x {
             petAnchor.position.x = clamped
         }
+    }
+
+    // MARK: - Fetch arena (KTD4, KTD6)
+
+    /// An explicit view frustum, in near-plane units.
+    ///
+    /// The arena owns the whole projection instead of composing onto SceneKit's, because
+    /// SceneKit will not cooperate with a partial override: `SCNCamera.projectionTransform`
+    /// reports an aspect-free matrix on read, and `SCNView.projectPoint`/`unprojectPoint`
+    /// ignore an override entirely. `symmetric(aspect:)` reproduces SceneKit's own projection
+    /// pixel-for-pixel, and every screen/world conversion here goes through these parameters,
+    /// so hit-testing always agrees with what renders.
+    struct Frustum: Equatable {
+        var left: Double
+        var right: Double
+        var bottom: Double
+        var top: Double
+        var near: Double
+        var far: Double
+
+        /// Row-vector convention, matching `SCNMatrix4`: translation in m41..m43, `w' = -z`.
+        var matrix: SCNMatrix4 {
+            var m = SCNMatrix4()
+            m.m11 = CGFloat(2 * near / (right - left))
+            m.m22 = CGFloat(2 * near / (top - bottom))
+            m.m31 = CGFloat((right + left) / (right - left))
+            m.m32 = CGFloat((top + bottom) / (top - bottom))
+            m.m33 = CGFloat(-(far + near) / (far - near))
+            m.m34 = -1
+            m.m43 = CGFloat(-2 * far * near / (far - near))
+            return m
+        }
+
+        /// The centred frustum SceneKit itself would use for `aspect`.
+        static func symmetric(aspect: Double) -> Frustum {
+            let top = CameraLens.zNear * tan(CameraLens.fieldOfView * .pi / 360)
+            return Frustum(
+                left: -top * aspect, right: top * aspect,
+                bottom: -top, top: top,
+                near: CameraLens.zNear, far: CameraLens.zFar
+            )
+        }
+
+        /// The off-centre frustum that makes a viewport covering `arena` show the same world
+        /// at the same screen pixels as one covering `home` did. Scale is preserved by keeping
+        /// near-plane units per screen point constant; the home spot is preserved by shifting
+        /// the frustum so the camera axis still lands on `home`'s centre.
+        static func arena(home: NSRect, arena: NSRect) -> Frustum {
+            let homeFrustum = symmetric(aspect: Double(home.width / home.height))
+            let unitsPerPoint = Double(home.width) / (homeFrustum.right - homeFrustum.left)
+            let width = Double(arena.width) / unitsPerPoint
+            let height = Double(arena.height) / unitsPerPoint
+            let tx = 2 * Double(home.midX - arena.midX) / Double(arena.width)
+            let ty = 2 * Double(home.midY - arena.midY) / Double(arena.height)
+            return Frustum(
+                left: -width * (1 + tx) / 2, right: width * (1 - tx) / 2,
+                bottom: -height * (1 + ty) / 2, top: height * (1 - ty) / 2,
+                near: homeFrustum.near, far: homeFrustum.far
+            )
+        }
+    }
+
+    /// True while the panel is expanded to the arena.
+    var isInArena: Bool { arenaFrustum != nil }
+
+    /// Forces the projection that keeps `home`'s mapping while the view covers `arena`.
+    /// Apply this before resizing the panel so no frame renders with the wrong projection.
+    func applyHomeProjection(home: NSRect, arena: NSRect) {
+        let frustum = Frustum.arena(home: home, arena: arena)
+        arenaFrustum = frustum
+        cameraNode.camera?.projectionTransform = frustum.matrix
+    }
+
+    /// Returns to the ordinary home projection. Call after the panel is back at its home frame.
+    func restoreProjection() {
+        arenaFrustum = nil
+        applyHomeProjection()
+    }
+
+    /// Re-derives the centred projection for the current view size. The panel locks a 3:2
+    /// content aspect, so this is stable across resizes.
+    private func applyHomeProjection() {
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        cameraNode.camera?.projectionTransform =
+            Frustum.symmetric(aspect: Double(bounds.width / bounds.height)).matrix
+    }
+
+    override func layout() {
+        super.layout()
+        // The arena's frustum is absolute; only the home projection tracks the view size.
+        if arenaFrustum == nil { applyHomeProjection() }
+    }
+
+    private var currentFrustum: Frustum? {
+        if let arenaFrustum { return arenaFrustum }
+        guard bounds.width > 0, bounds.height > 0 else { return nil }
+        return .symmetric(aspect: Double(bounds.width / bounds.height))
+    }
+
+    /// This view's rect in screen coordinates.
+    private var screenViewport: NSRect? {
+        guard let window, bounds.width > 0, bounds.height > 0 else { return nil }
+        return window.convertToScreen(convert(bounds, to: nil))
+    }
+
+    /// Turns a screen point into a spot on the dog's ground plane, as `(x, z)` (KTD6).
+    ///
+    /// Every on-screen point yields a spot: a ray that passes above the horizon keeps its
+    /// heading and lands at the far clamp, which is what makes "higher on screen means
+    /// farther away" hold all the way to the top of the display.
+    func groundPoint(forScreenPoint screenPoint: NSPoint) -> SIMD2<Double>? {
+        guard let viewport = screenViewport, let frustum = currentFrustum else { return nil }
+        let ndcX = 2 * Double(screenPoint.x - viewport.minX) / Double(viewport.width) - 1
+        let ndcY = 2 * Double(screenPoint.y - viewport.minY) / Double(viewport.height) - 1
+        let xView = (ndcX * (frustum.right - frustum.left) + (frustum.right + frustum.left)) / 2
+        let yView = (ndcY * (frustum.top - frustum.bottom) + (frustum.top + frustum.bottom)) / 2
+        let transform = cameraNode.simdWorldTransform
+        let heading = transform * SIMD4<Float>(Float(xView), Float(yView), Float(-frustum.near), 0)
+        let direction = SIMD3<Double>(Double(heading.x), Double(heading.y), Double(heading.z))
+        let origin = SIMD3<Double>(
+            Double(transform.columns.3.x),
+            Double(transform.columns.3.y),
+            Double(transform.columns.3.z)
+        )
+        var landing: SIMD2<Double>?
+        if direction.y < -1e-9 {
+            let distance = -origin.y / direction.y
+            if distance > 0 {
+                landing = SIMD2(
+                    origin.x + distance * direction.x,
+                    origin.z + distance * direction.z
+                )
+            }
+        }
+        if landing == nil {
+            if direction.z < -1e-9 {
+                let distance = (Self.arenaZFar - origin.z) / direction.z
+                landing = SIMD2(origin.x + distance * direction.x, Self.arenaZFar)
+            } else {
+                landing = SIMD2(origin.x, Self.arenaZFar)
+            }
+        }
+        var ground = landing ?? SIMD2(origin.x, Self.arenaZFar)
+        ground.y = min(max(ground.y, Self.arenaZFar), Self.arenaZNear)
+        ground.x = min(max(ground.x, -Self.arenaXLimit), Self.arenaXLimit)
+        return ground
     }
 
     // MARK: - Gaze
