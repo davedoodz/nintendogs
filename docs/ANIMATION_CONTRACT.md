@@ -48,7 +48,7 @@ skl_root
 
 SceneKit matches animation channels to nodes by name. Rename a bone, the clip silently does nothing.
 
-**Rigid skinning.** Every vertex is bound to exactly one joint (DS rigs have no weight blending), so a joint that meets the body — `tail1`, `neck`, `Lleg1`/`Rleg1`, `Larm1`/`Rarm1` — opens a visible seam when rotated far from rest. Keep those under ~10° and put the range in the next joint down the chain (`tail2`/`tail3`, `head`, `*2`/`*foot`/`*hand`). The first tail-wag test rotated `tail1` ±20° on a pitch axis and showed the seam under the tail root; a wag is a horizontal sweep.
+**Rigid skinning.** Every vertex is bound to exactly one joint (DS rigs have no weight blending), so a joint that meets the body — `tail1`, `neck`, `Lleg1`/`Rleg1`, `Larm1`/`Rarm1` — opens a visible seam when rotated far from rest. Keep those under ~10° and put the range in the next joint down the chain (`tail2`/`tail3`, `head`, `*2`/`*foot`/`*hand`). The first tail-wag test rotated `tail1` ±20° on a pitch axis and opened the tail-root seam. The corrected export keeps `tail1` stationary and rotates `tail2` ±20° in horizontal yaw. Mac captures over white confirmed a continuous butt-to-tail silhouette at both sampled poses. Evidence: `docs/screens/native-tailwag-seam-fixed.png`.
 
 ## Toolchain
 
