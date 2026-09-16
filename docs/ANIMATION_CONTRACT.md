@@ -64,7 +64,7 @@ SceneKit matches animation channels to nodes by name. Rename a bone, the clip si
 
 If step 1 fails (no armature, exploded weights), stop and report — the fallback is re-rigging, which changes this whole plan.
 
-**Result: GO (2026-09-16).** Blender 4.2.23 preserved all 28 bones, the hierarchy, weights, UVs and materials. Its 30 sampled `tail1` matrices moved only the 58 tail-weighted vertices. The native Mac app transferred that channel by node name onto the original coat-B rig and played the one-second loop with no re-skinning or remap. Evidence: `blender/step0_validation.json`, `docs/screens/native-tailwag-a.png`, and `docs/screens/native-tailwag-b.png`.
+**Result: GO (2026-09-16).** Blender 4.2.23 preserved all 28 bones, the hierarchy, weights, UVs and materials. The corrected 30-sample `tail2` matrices moved only tail vertices while `tail1` stayed stationary. The native Mac app transferred that channel by node name onto the original coat-B rig and the white-background captures show a continuous butt-to-tail silhouette at both sampled poses. Evidence: `blender/step0_validation.json` and `docs/screens/native-tailwag-seam-fixed.png`.
 
 ## Clip list (24)
 
@@ -113,9 +113,9 @@ Filename is the contract: `shiba_<name>[_loop].dae`. Mac side derives the state 
 
 ## Mac side (this is what consumes the files)
 
-- `ModelLoader.load` loads the base model; `AnimationLoader.apply` loads each exported scene, copies its imported animation players to same-named nodes in the pet rig, and keys them by clip name.
-- The caller sets `repeats`; loop filenames pass `true`, one-shot clips pass `false`.
-- `SCNView.isPlaying` and continuous rendering are enabled while animation runs. The later state machine must stop both when no loop or queued clip remains to restore the 0.0% idle CPU budget.
+- `ModelLoader.load` loads the base model; `AnimationController` preloads all 24 exported scenes, validates every channel against the rig before mutation, and reuses same-named SceneKit animation players.
+- `AnimationController.play(_:, careRequest:)` routes posture transitions with 0.25 s crossfades and supports autonomous idle/beg/sleep plus care and reaction activities. `playClip(named:)` previews any exported clip.
+- `SCNView.isPlaying` and continuous rendering are enabled while animation runs; the caller mirrors the controller's deterministic `sceneTime` into the renderer. The loop must stop both when no clip remains to restore the 0.0% idle CPU budget.
 
 ## Reporting back
 

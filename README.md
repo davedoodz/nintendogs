@@ -14,13 +14,14 @@ mac/scripts/bundle.sh release
 
 Bundle: `mac/build/Nintendogs.app`. It contains the local Shiba models and textures, so it does not need the repository beside it. macOS 14+; the current build targets the host architecture. The bundle is ad-hoc signed for local use, not notarized or distributed.
 
-Implemented: a menu-bar app, borderless floating non-activating panel, transparent SceneKit view, fixed camera, lighting, blob shadow, model normalization, explicit black-and-tan Shiba coat-B texture assignment, cross-rig Collada animation transfer by node name, and show/hide/rotate controls. The one-second Blender tail-wag proof loops on the original coat-B rig without re-skinning. Clicking the Shiba rotates it 90°; dragging the panel still moves the window. **No autonomous behavior, care loop, or production animation set yet.**
+Implemented: a menu-bar app, borderless non-activating panel, transparent SceneKit view, fixed camera, lighting, blob shadow, model normalization, coat-B textures, cross-rig Collada animation transfer, a 24-clip controller with posture transitions and 0.25 s fades, persistent needs/care behavior, JSON save state, food/water/pet/play/call/rest controls, and base-clip preview controls. The 24 authored clips load and render in a bundled headless smoke; the corrected tail wag has no root seam. Clicking the Shiba calls it; click-drag strokes it; dragging the panel still moves the window. **Fetch depth, park walk, notifications, and long-duration soak remain.**
 
-The release build, signature verification and plist validation pass. A fresh `npm run assets:mac` download was verified in a temporary directory, including all three coats and their textures. All 12 asset files in the bundle match the source files.
+The release build, signature verification and bundled headless smoke pass. The smoke covers feeding plus JSON reload, all 24 clip renders, and sleep/call/eat/drink/play/pet/idle transitions. `swift test` remains blocked by the local Command Line Tools installation's missing Swift Testing runtime.
 
-`swift test` is currently blocked: the Command Line Tools installation lacks both XCTest and Swift Testing. Full Xcode is installed but requires license acceptance. The package includes a rig/normalization regression test for a toolchain with Swift Testing.
+Blender 4.2.23 LTS on Windows successfully imports, authors and exports the rip. Blender 5.2.1 has no Collada import operator; use 4.2 LTS for animation work.
 
-Installed Blender 5.2.1 has no Collada import operator. The animation-authoring import/export workflow must therefore be validated before David authors clips; do not assume the earlier plan's direct DAE round trip works. The failed conversion experiment was removed.
+The package includes rig, needs, persistence and animation regression tests for a toolchain with Swift Testing support; this machine's Command Line Tools cannot run them until the Xcode license/runtime issue is resolved.
+
 
 With David's explicit permission, the packaged app was launched and its own window captured. The requested black-and-tan coat-B Shiba renders with a black body, tan eyebrows/cheeks/legs, and white muzzle/chest/paws. The PNG has transparent background pixels (corner alpha 0). An actual mouse drag moved the panel while Chrome remained the frontmost app; the original panel and cursor positions were restored. A real click on the Shiba rotated the model 90° to the reference side profile. Three two-second-spaced idle samples reported 0.0% CPU and 87.2 MB resident memory. This proves the static U1 scene, not animation performance or a long-duration soak. Evidence: `docs/screens/native-shiba.png`.
 
