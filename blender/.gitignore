@@ -1,0 +1,4 @@
+__pycache__/
+native_exports/
+qa_frames/
+*.blend1

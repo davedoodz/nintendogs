@@ -1,69 +1,25 @@
 {
-  "result": "GO: Blender import, Pose Mode deformation and sampled export passed; SceneKit playback pending Mac validation",
-  "blender": "4.2.23 LTS",
-  "source_sha256": "ca63f32a333cb5f04da83fd5b124156323cc12ec2ff08b94c3461f4f7161f339",
-  "bones": 28,
-  "hierarchy_matches_source": true,
-  "source_hierarchy": {
-    "skl_root": null,
-    "waist": "skl_root",
-    "tail1": "waist",
-    "tail2": "tail1",
-    "tail3": "tail2",
-    "Lleg1": "waist",
-    "Lleg2": "Lleg1",
-    "Lfoot1": "Lleg2",
-    "Lfoot2": "Lfoot1",
-    "Rleg1": "waist",
-    "Rleg2": "Rleg1",
-    "Rfoot1": "Rleg2",
-    "Rfoot2": "Rfoot1",
-    "spin": "skl_root",
-    "Larm1": "spin",
-    "Larm2": "Larm1",
-    "Lhand1": "Larm2",
-    "Lhand2": "Lhand1",
-    "Rarm1": "spin",
-    "Rarm2": "Rarm1",
-    "Rhand1": "Rarm2",
-    "Rhand2": "Rhand1",
-    "chest": "spin",
-    "neck": "chest",
-    "head": "neck",
-    "Rear1": "head",
-    "Lear1": "head",
-    "mouth": "head"
-  },
-  "contract_diagram_discrepancies": {
-    "spin": "source parent skl_root; diagram waist",
-    "Larm1": "source parent spin; diagram chest",
-    "Rarm1": "source parent spin; diagram chest"
-  },
-  "vertices": 1140,
-  "rest_pose_max_error": 2.5288109106536417e-07,
-  "pose_mode_test": {
-    "bone": "tail1",
-    "rotation_degrees": 20,
-    "axis": "local Y",
-    "moved_vertices": 58,
-    "tail_weighted_vertices": 58,
-    "non_tail_vertices_moved": 0,
-    "max_displacement": 0.5037781927863606
-  },
-  "mesh_uv_weights_materials_transforms_unchanged": true,
-  "frame_range": [
+  "name": "shiba_test_tailwag",
+  "frames": [
     1,
     30
   ],
   "fps": 30,
-  "actions": [
-    "shiba_test_tailwag"
+  "bone_count": 28,
+  "channels": [
+    "tail2"
   ],
-  "tail_channel_samples": 30,
-  "sample_time_range_seconds": [
-    0.0333333,
-    1.0
-  ],
+  "body_joint_max_degrees": {
+    "tail1": 0,
+    "neck": 0,
+    "Lleg1": 0,
+    "Rleg1": 0,
+    "Larm1": 0,
+    "Rarm1": 0
+  },
+  "native_sample_max_matrix_error": 4.76837158203125e-07,
+  "source_geometry_skin_bind_hierarchy_preserved": true,
+  "mesh_data_unchanged": true,
   "export_settings": {
     "selected": true,
     "include_animations": true,
@@ -81,9 +37,18 @@
     "triangulate": false,
     "use_texture_copies": false
   },
-  "export_up_axis": "Z_UP",
-  "exporter_note": "Blender 4.2 writes Z_UP metadata even with Y-up/-Z-forward export selectors. Apply Global Orientation enabled for consistent exported rest and animation matrices; no transforms applied to the working model. Only image paths normalized to relative references after export.",
-  "export_channels": [
-    "Armature_tail1/transform"
-  ]
+  "final_up_axis": "Y_UP",
+  "source_sha256": "ca63f32a333cb5f04da83fd5b124156323cc12ec2ff08b94c3461f4f7161f339",
+  "result": "tail2 +/-20 degree horizontal yaw; tail1 stationary; Mac seam recapture pending",
+  "pose_mode_test": {
+    "bone": "tail2",
+    "yaw_extremes_degrees": [
+      -20,
+      20
+    ],
+    "tail1_max_matrix_error": 0.0,
+    "moved_vertices": 42,
+    "max_vertical_vertex_motion": 6.965247489887361e-09,
+    "exported_yaw_axis_error": 5.960464477539063e-08
+  }
 }
