@@ -34,7 +34,7 @@ Walk/run clips have fixed roots. Root movement waits until the actual gait clip 
 
 Speeds are measured from the backward velocity of the planted hind paw in the authored Collada matrices, scaled to the normalized model. Malformed or missing gait data raises a loading error rather than silently substituting guessed speeds.
 
-The imported rig faces **+Z**: head/mouth positions established this in a bundled probe. Initial facing is toward the camera. Turning uses that same convention. Bounds account for the model's horizontal radius and camera perspective, not just its center. The panel keeps a 3:2 aspect ratio when resized. The shadow follows the pet anchor. A hungry/thirsty dog can wander toward the bowl.
+The imported rig faces **+Z**: head/mouth positions established this in a bundled probe. Initial facing is toward the camera. Turning uses that same convention. Wander targets span depth −2.2…0.1 (the near end is where the front paws still clear the panel's bottom edge; at the far end the dog renders at about half size), so legs toward or away from the camera read as real depth. Bounds account for the model's horizontal radius and camera perspective at the current depth, not just its center. The panel keeps a 3:2 aspect ratio when resized. The shadow follows the pet anchor. A hungry/thirsty dog can wander toward the bowl.
 
 ## Attention and play
 

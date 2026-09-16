@@ -8,3 +8,4 @@ Blender 4.2 LTS working files and scripts (Windows side). Contract: docs/ANIMATI
 - `shiba_clips_tier2.blend`: 12 second-tier actions, separate from the accepted base set.
 - Pass `-- --tier2` to `author_clips.py` / `verify_clips.py` for the second tier.
 - `tier2_clips.py`: second-tier poses and checks against accepted handoff states.
+- `manual_clips.py`: hand-keyed clips. `-- --setup` creates `shiba_manual.blend`; a plain run bakes and exports every `shiba_*` action in it. Guide: `docs/BLENDER_HAND_ANIMATION.md`.

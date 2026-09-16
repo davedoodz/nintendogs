@@ -45,17 +45,23 @@ enum GaitStride {
         let low = heights.min()!
         let contactHeight = low + (heights.max()! - low) * 0.25
         var distance = 0.0
+        var forwardDrift = 0.0
         var contactTime = 0.0
         for index in 1..<times.count {
             let dt = times[index] - times[index - 1]
             guard dt > 0 else { throw MeasurementError.invalidClip(name) }
+            guard heights[index] <= contactHeight, heights[index - 1] <= contactHeight else { continue }
             let backward = forward[index - 1] - forward[index]
-            if heights[index] <= contactHeight, heights[index - 1] <= contactHeight, backward > 0 {
+            if backward > 0 {
                 distance += backward
                 contactTime += dt
+            } else {
+                forwardDrift -= backward
             }
         }
-        guard contactTime > 0, distance > 0, scale.isFinite, scale > 0 else {
+        // A planted paw that mostly moves +Z depicts a tail-first gait; root travel
+        // head-first would then read as a moonwalk. Refuse rather than guess.
+        guard contactTime > 0, distance > forwardDrift, scale.isFinite, scale > 0 else {
             throw MeasurementError.invalidClip(name)
         }
         return CGFloat(distance / contactTime) * scale

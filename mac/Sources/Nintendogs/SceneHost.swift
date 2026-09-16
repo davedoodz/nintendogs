@@ -43,10 +43,11 @@ final class SceneHost: SCNView {
     static let arenaZNear: Double = 0.6
     static let arenaXLimit: Double = 6
 
-    /// Depth band wander targets are picked within, either side of the
-    /// camera's look-at plane (`docs/ALIVENESS_PLAN.md` Phase 2: "z within
-    /// ±0.15 of camera plane").
-    private static let wanderZRange: ClosedRange<CGFloat> = -0.15...0.15
+    /// Depth band wander targets are picked within. The near end is where the
+    /// front paws still clear the panel's bottom edge (measured: z ≈ 0 with the
+    /// fixed lens); the far end shrinks the dog to about half size, so a leg
+    /// toward or away from the camera reads as real depth, not lateral drift.
+    private static let wanderZRange: ClosedRange<CGFloat> = -2.2...0.1
     /// Radius of the normalized pet, including a small allowance for moving paws.
     private var petRadius: CGFloat = 0
     /// A requested run only actually runs if the picked target is at least

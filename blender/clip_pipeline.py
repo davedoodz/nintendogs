@@ -97,13 +97,21 @@ def read_clip_channels(path):
 
 
 class Rig:
-    def __init__(self):
+    def __init__(self, blend=None):
+        """Fresh DAE import by default; `blend` opens a saved working file instead
+        (hand-keyed actions in `shiba_manual.blend`). Everything after the load is
+        identical, so exports from either path go through the same checks."""
         assert bpy.app.version[:2] == (4, 2)
-        bpy.ops.wm.read_factory_settings(use_empty=True)
         self.source = ET.parse(SOURCE).getroot()
         self.nodes, self.parents, self.source_rest = source_rig(self.source)
-        bpy.ops.wm.collada_import(filepath=str(SOURCE), fix_orientation=False,
-                                 find_chains=False, auto_connect=False)
+        if blend is None:
+            bpy.ops.wm.read_factory_settings(use_empty=True)
+            bpy.ops.wm.collada_import(filepath=str(SOURCE), fix_orientation=False,
+                                     find_chains=False, auto_connect=False)
+        else:
+            bpy.ops.wm.open_mainfile(filepath=str(blend))
+            if bpy.context.object and bpy.context.object.mode != "OBJECT":
+                bpy.ops.object.mode_set(mode="OBJECT")
         self.scene = bpy.context.scene
         for obj in self.scene.objects:
             obj.update_tag(refresh={"OBJECT", "DATA", "TIME"})

@@ -155,7 +155,9 @@ def gait(rig, t, running=False):
         stride = (.24 if fore else .32) if running else (.17 if fore else .23)
         lift = (.18 if running else .12) * max(0, math.sin(phase)) ** 2
         target = rig.rest[toe].translation.copy()
-        target.z += stride * math.cos(phase)
+        # The rig faces +Z. A planted paw must travel -Z during contact (lift == 0,
+        # sin(phase) <= 0) so the app's +Z root travel reads as forward, not a moonwalk.
+        target.z -= stride * math.cos(phase)
         target.y += lift + .025
         anchor = anchors[limb]
         delta = target - anchor
