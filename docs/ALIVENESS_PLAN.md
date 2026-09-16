@@ -1,113 +1,80 @@
-# Aliveness plan — the Shiba moves on its own
+# Aliveness — autonomous desktop Shiba
 
-**Outcome:** the dog looks alive with zero menu clicks. Left alone on the desktop it fidgets, looks around, yawns, stretches, scratches, shakes, wanders, and reacts to the cursor — all from the 24 authored clips, driven by its needs and the time of day.
+## Outcome and status
 
-**Done when:** a 10-minute unattended recording of the panel shows no identical 30-second window, every autonomous transition uses an authored clip with no pop, idle CPU stays under 3 %, and David accepts the feel.
+The dog should look alive without selecting animations. Care remains optional interaction, not the trigger required to make it move.
 
-## Why it looks dead today
+**Built:** autonomous fidgets, posture changes, bounded wandering, cursor gaze and hover reactions, direct play gestures, daytime naps, return greetings, and morning/evening rhythms. All use the existing 24 Blender clips; no new Blender exports were needed.
 
-Evidence from `mac/Sources/PetKit`:
+**Needs David's eye:** pace, character, and how enjoyable the interactions feel. Headless verification does not constitute visual acceptance or shipping.
 
-- `PetBehavior.resolveAutonomousActivity` returns only `.idle`, `.sit`, `.sleep` — three states.
-- `AnimationController.profile(for:)` maps those to exactly three held loops (`shiba_idle_loop`, `shiba_sit_idle_loop`, `shiba_sleep_loop`) plus `shiba_beg_loop` when a care request is pending.
-- Nine authored one-shots and two loops are never reached autonomously: `stretch`, `yawn`, `scratch`, `look_around_loop`, `alert`, `shake`, `bark`, `happy`, `walk_loop`, `run_loop`, `fetch_*`. Only menu/preview shows them.
-- Root is fixed in every clip (`blender/CLIPS_RESULT.md`: "in place, fixed root"), so the dog never changes position or facing.
-- Nothing reacts to the cursor except click (call) and drag (pet).
+## Architecture
 
-So the visible behaviour is: one loop, forever, in one spot. Correct simulation, no life.
+- `PetBehavior` owns needs, care activities, and persisted presence history.
+- `AmbientDirector` chooses visual actions using a seeded RNG, needs, local hour, cooldowns, and foreground elapsed time. It does not alter needs or persist its animation state.
+- `AnimationController` owns clip metadata, posture routes, fades, logical request identity, scoped reactions, and locomotion. Repeated care-loop refreshes do not restart animations.
+- `SceneHost` owns root travel, gaze, bounds, shadow, and hit-testing. `AppDelegate` coordinates these layers and workspace notifications.
 
-## Design principle
+## Fidgets and posture
 
-Keep `PetBehavior` as the source of truth for *what the dog needs* (deterministic, persisted, tested). Add a separate **ambient layer** that decides *what the dog does with its body while in a state*. Ambient choices are visual, never persisted, and never change needs — they can be re-rolled at any time without corrupting save data. Same split as body/face in games: logic state vs. performance.
+While awake, the dog alternates idle and looking-around loops, with occasional yawns, shakes, alerts, barks, and happy reactions. It occasionally sits, breathes in its sitting loop, scratches, and stands again. Low energy favors yawning; low cleanliness favors shaking/scratching; happy needs favor happy reactions. Evening increases yawning; nighttime reduces standing activity.
 
-```mermaid
-flowchart LR
-  Needs[PetBehavior\nidle/sit/sleep + interactions] --> Director[AmbientDirector\npicks flourishes, wander, gaze]
-  Director --> Anim[AnimationController\nposture routing + fades]
-  Cursor[SceneHost cursor / click / drag] --> Director
-  Anim --> Rig[SceneKit rig]
-  Director -- root motion + head aim --> Rig
-```
+Flourishes have a six-second minimum gap and per-clip cooldowns. Care, requested rest, and diagnostic preview take priority. Completing care leaves a short settling interval before spontaneous activity resumes. Cancelling an interaction also cancels queued ambient sequences.
 
-## Phase 1 — Fidget scheduler (biggest payoff, ~1 day)
+Actual authored postures take precedence over the original draft's assumptions:
 
-**New:** `PetKit/AmbientDirector.swift`, seeded RNG injected for tests.
+- `shiba_scratch` and `shiba_beg_loop` are seated.
+- `shiba_yawn`, bark, alert, shake, happy, and looking-around are standing.
+- `shiba_stretch` moves from lying to standing.
+- Sleeping may briefly stir through wake and lie-down, then return to sleep.
 
-While the logical activity is a held state, the director schedules a one-shot "flourish" every 8–25 s (random, need-weighted), plays it via `AnimationController`, and returns to the state's loop. Pools by posture, taken from the clip pose table in `blender/CLIPS_RESULT.md`:
+## Wandering
 
-| Logical state | Held loop | Flourish pool (all start and end in that posture) |
-| --- | --- | --- |
-| idle (standing) | `shiba_idle_loop` ⇄ `shiba_look_around_loop` | `shiba_yawn`, `shiba_shake`, `shiba_alert`, `shiba_bark`, `shiba_happy` |
-| sit | `shiba_sit_idle_loop` | `shiba_scratch` (seated), `shiba_yawn` |
-| sleep | `shiba_sleep_loop` | none — but a rare `shiba_wake` → `shiba_sleep_loop` "stir" (sit up, look, lie back) every 2–4 min |
-| beg (care request) | `shiba_beg_loop` | `shiba_bark` every 20–40 s (the dog asks louder) |
+Walk/run clips have fixed roots. Root movement waits until the actual gait clip starts; a standing-up route never translates the dog prematurely. Travel stops on care, hiding, or suppression, and ending a gait routes back to the logical resting posture.
 
-Need weighting (multiplies base pick probability):
+Speeds are measured from the backward velocity of the planted hind paw in the authored Collada matrices, scaled to the normalized model. Malformed or missing gait data raises a loading error rather than silently substituting guessed speeds.
 
-- energy < 40 → `yawn` ×3, `stretch` on next stand-up
-- fun < 40 → `happy` ×0, `look_around` ×2 (bored, scanning)
-- fun > 70 or affection > 70 → `happy` ×2, `bark` ×1.5
-- cleanliness < 40 → `shake` ×3, `scratch` ×3
-- night (22–07) → all standing flourishes ×0.3, prefers sit/sleep (already in `PetBehavior`)
+The imported rig faces **+Z**: head/mouth positions established this in a bundled probe. Initial facing is toward the camera. Turning uses that same convention. Bounds account for the model's horizontal radius and camera perspective, not just its center. The panel keeps a 3:2 aspect ratio when resized. The shadow follows the pet anchor. A hungry/thirsty dog can wander toward the bowl.
 
-Also swap the held loop itself: in idle, alternate `shiba_idle_loop` and `shiba_look_around_loop` on a 20–40 s cadence so even the "base" pose is not a single loop.
+## Attention and play
 
-**Wake-up route change:** when leaving `sleep` toward standing, use `shiba_stretch` (authored lying→standing, 105 f) instead of `wake` + `stand_from_sit` about half the time. Both routes are valid per the contract; `AnimationController.route(from:to:)` gets a `variant` parameter.
+- Hover: alert, then a happy response; sustained attention slowly increases affection.
+- Cursor nearby: limited, eased head aim, composited after authored animation. Head position is preserved, and body-adjacent joints are not distorted.
+- Single-click the dog: call/wake.
+- Stroke across it: pet.
+- Double-click it: play.
+- Cursor leaves after attention: look around.
 
-**Controller changes:**
+Cursor location is polled without a global input monitor or Accessibility permission. Gaze is disabled during sleep, eating, drinking, and diagnostic preview. The animation picker remains under **Animation diagnostics**; it is not needed for normal use. **Personality** controls activity level and whether the dog explores the panel.
 
-- `AnimationController.playFlourish(named:)` — a one-shot that returns to `currentClip` on completion, keeping `currentActivity` and `currentPosture` unchanged. Reject if the clip's start posture ≠ `currentPosture` (posture table becomes data on each clip, not just `_loop` suffix).
-- Interactions (`eat`, `pet`, `call` …) preempt any flourish immediately; existing `play()` already blend-outs the active step, so nothing new is needed there except cancelling the director's pending timer.
-- Cooldown per clip (no `yawn` twice within 60 s) and global minimum gap 6 s between flourishes so the dog is not hyperactive.
+## Presence rhythm
 
-**Tests (`AmbientDirectorTests`):** with a seeded RNG, over 600 simulated seconds in idle the director emits between 24 and 75 flourishes, never two within 6 s, never one whose posture ≠ current posture, never any while an interaction is running, and the low-energy weighting produces more `yawn` than the high-energy run.
+After twenty minutes alone during the day, the dog settles into sitting; after twenty-five, it naps. A forty-five-minute cycle lets a fully rested unattended dog get up again rather than sleep forever. Critical hunger/thirst prevents this nap. Calling or caring wakes it and provides an awake grace period.
 
-## Phase 2 — Wander with root motion (~1 day)
+System/display/session return notifications request a greeting, with duplicate notifications debounced. Requested rest is respected. Morning return favors a stretch on the wake route and adds a shake before the alert/happy greeting. `lastInteractionAt` is persisted; older saves without it load using their saved timestamp.
 
-The walk/run cycles are fixed-root. Move the node procedurally: the director picks a target x inside the panel (keep y fixed, z within ±0.15 of camera plane), rotates the model to face it (yaw only, 0.3 s eased), plays `shiba_walk_loop`, and translates the root at a speed matched to the cycle's stride so feet do not slide. Stride is measured once: distance a forepaw travels in one cycle in the authored clip (read from the `.dae` on first load, cached). On arrival, blend to idle.
+Hidden or sleeping workspaces do not advance the visual clock. Needs still use wall-clock catch-up. The foreground animation loop targets 30 Hz and backs off to 250 ms while inactive.
 
-- Trigger: idle only, fun < 60 or every 45–120 s at random; never within 3 s of a click.
-- `shiba_run_loop` when fun > 75 and the target is > 60 % of panel width away — a happy burst.
-- Bowl interaction: when hunger/thirst request is pending, wander target = bowl position, then `beg_loop` facing the camera. The bowl is already a node in `SceneHost`.
-- Panel edges: clamp targets to the SceneKit view frustum at dog depth; `SceneHost` exposes `walkableBounds`.
-- Shadow blob follows the root (already parented? verify in `SceneHost.setPet`).
+## Optional sound
 
-**Test:** deterministic target sequence; root never leaves `walkableBounds`; facing is always toward velocity; on interaction mid-walk, root motion stops within one frame and posture routing still resolves from `standing`.
+Not implemented. The available audio inventory contains interface/reaction sounds, not identified bark/yawn/shake recordings. Unrelated UI effects are not used as substitute dog vocals. Sound can be added once suitable recordings are identified and David hears them.
 
-## Phase 3 — Cursor awareness (~half day)
+## Verification
 
-Cheap, huge perceived-life gain.
+Bundled, windowless probes exercise the actual PetKit code, SceneHost, and AppDelegate frame coordinator without ordering a window on screen or posting input to the desktop. The app harness changes only access control, its executable entry annotation, and the save destination; runtime methods are unchanged.
 
-- **Gaze:** `SceneHost` tracks the mouse via a global `NSEvent` monitor (no activation needed; panel is non-activating). Convert to a point at dog depth; the director aims `neck`/`head` with a small additive rotation (≤ 20° yaw, ≤ 10° pitch, spring-eased) on top of whatever clip plays. Only when the cursor is within ~1.5 panel-widths; otherwise ease back to clip pose. Disabled during `sleep`, `eat`, `drink`.
-- **Approach:** cursor hovers over the dog for > 1.5 s → `shiba_alert`, then if still hovering, `shiba_happy` and a small tail wag boost (affection +1 per 10 s of attention, capped).
-- **Cursor leaves after long attention** → `shiba_look_around_loop` once (looks for you).
+Evidence in `mac/build/aliveness-proof/`:
 
-Additive head aim must respect the rigid-skinning rule (`docs/ANIMATION_CONTRACT.md`): apply the rotation on `head` (not `neck`) with the ≤ 20° cap so the body-adjacent joint stays under its seam limit.
+- `unattended-ten-minutes.mp4`: 600 seconds of accelerated foreground simulation, rendered at 10 recording frames/second from 30 Hz simulation.
+- `transitions.txt`: autonomous clip changes; the verified run used 13 distinct clips and 20 distinct thirty-second behavior windows.
+- `unattended-10s.png`, `unattended-60s.png`, `unattended-300s.png`: representative frames.
 
-## Phase 4 — Idle-time and presence rhythm (~half day)
+Checks cover all 24 clips actually changing bone transforms; viewport-edge pixels throughout the recording; root travel; pause/resume; posture routes; queued-walk cancellation; sustained play; sleep/stir/return; greeting/care preemption; and preview isolation. Separate headless input checks cover real hit-testing, click, double-click, and strokes. Gaze checks verify left/right/up/down direction and an unchanged head-joint origin. Persistence checks cover feeding 80 → 50, JSON reload, legacy saves, and backward clocks.
 
-- After 20 min with no interaction, drift to `sit`, then `sleep`, even by day — a dog left alone naps. Encode in `PetBehavior` as a `lastInteractionAt` field (persisted) feeding `sleepUtility`.
-- On wake from system sleep or display unlock (`NSWorkspace.didWakeNotification`, `sessionDidBecomeActive`) → if sleeping: `wake` → `alert` → `happy` greeting sequence; if awake: `alert` toward camera. This is the "dog notices you came back" moment.
-- Time-of-day flourishes: morning first-sight `stretch` + `shake`; evening `yawn` bias ×2 after 20:00.
+A 60-second real-time offscreen render at 720×480 with 4× MSAA measured **2.55% CPU**, averaging **27.2 fps** on the current M2 Max. This is an offscreen rendering measurement, not a long-duration live-window soak or a battery-life guarantee. The old static scene's 0.0% CPU result is not an animation-performance claim.
 
-## Phase 5 — Sound (optional, ~half day)
+Swift Testing execution remains blocked by the local Xcode/Command Line Tools runtime/license state. Focused regression sources are retained; their syntax and the release build are checked, and the same risky transitions are exercised by bundled executables.
 
-Short bark/yawn/shake samples from `public/assets` (already ripped) played on the matching flourish at low volume, respecting a mute toggle in `StatusMenu`. Off by default until David hears it.
+## Outside this change
 
-## Order and proof
-
-1. Phase 1 ships first — it alone changes the app from "one loop" to "a dog doing things".
-2. Phase 3 next — cursor gaze is the cheapest "it sees me" effect and needs no new clips.
-3. Phase 2 wander, then Phase 4 rhythm, then sound.
-
-Proof for each phase: headless bundled smoke records 60 s of `currentClip` transitions with a seeded director and asserts the expectations above; a 10-minute screen recording of the real panel (`screencapture -v` on the window id, no focus change) reviewed by David for feel. Tune constants live from a debug "Ambient" submenu (frequency multiplier, wander on/off) so tuning is a menu tweak, not a rebuild.
-
-## Not in scope
-
-- New Blender clips. Everything above uses the 24 already authored. If Phase 1 reveals a gap (e.g. a sit-posture `look_around`), that becomes one prompt to the Windows session, not a blocker.
-- Fetch depth and park walk (U7/U8) — separate plan.
-- Persisting ambient state — deliberate; only needs persist.
-
-## Cost
-
-Phases 1–4 ≈ 3 days of Mac-side work, no Windows dependency. Risk: root-motion foot sliding in Phase 2 if stride measurement is off — mitigated by measuring from the clip, not guessing, and by walking slowly.
+Fetch depth, park walking, and other roadmap work are separate. Unrelated concurrent UI work is preserved. No visible app restart, visual acceptance, distribution, or shipping is implied by the headless checks.

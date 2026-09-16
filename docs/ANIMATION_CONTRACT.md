@@ -114,8 +114,10 @@ Filename is the contract: `shiba_<name>[_loop].dae`. Mac side derives the state 
 ## Mac side (this is what consumes the files)
 
 - `ModelLoader.load` loads the base model; `AnimationController` preloads all 24 exported scenes, validates every channel against the rig before mutation, and reuses same-named SceneKit animation players.
-- `AnimationController.play(_:, careRequest:)` routes posture transitions with 0.25 s crossfades and supports autonomous idle/beg/sleep plus care and reaction activities. `playClip(named:)` previews any exported clip.
-- `SCNView.isPlaying` and continuous rendering are enabled while animation runs; the caller mirrors the controller's deterministic `sceneTime` into the renderer. The loop must stop both when no clip remains to restore the 0.0% idle CPU budget.
+- `AnimationController.play(_:careRequest:restart:)` routes posture transitions with 0.25 s fades. Heartbeat requests are idempotent; explicit user actions use `restart: true`. `AmbientDirector` selects posture-safe flourishes and sequences without changing needs. `playClip(named:)` remains a diagnostic preview.
+- `SCNView.isPlaying` and continuous rendering follow active animation. Foreground scene time targets 30 Hz; hidden/system-sleep time does not advance it. The old static 0.0% CPU result is not an animation budget. The current offscreen 720×480 / 4× MSAA measurement is 2.55% CPU.
+- The imported rig faces **+Z**, as established from head/mouth world positions. Root travel starts only when the actual walk/run clip is playing. Gait speed is derived from the planted paw's backward velocity, not full-cycle excursion.
+- Gaze is a constrained world-space rotation on `head`, preserving the joint's position and authored pose. `neck` and body-adjacent joints are not procedurally rotated. Begging and scratching are seated; yawning is standing; stretching is lying-to-standing.
 
 ## Reporting back
 

@@ -2,7 +2,7 @@
 
 **Direction change (2026-09-16):** the product is now a native macOS desktop pet — one Nintendogs Shiba that lives on the Mac, sleeps, eats, begs, fetches into depth and needs feeding and walking. The one-week build plan lives in the Obsidian vault at `projects/nintendogs-mac-pet-plan.md`. The earlier browser study remains as reference for flows and asset provenance.
 
-## Native macOS spike
+## Native macOS pet
 
 Confirmed direction: **SceneKit, a Shiba Inu, and Blender animation clips authored by David**.
 
@@ -14,9 +14,9 @@ mac/scripts/bundle.sh release
 
 Bundle: `mac/build/Nintendogs.app`. It contains the local Shiba models and textures, so it does not need the repository beside it. macOS 14+; the current build targets the host architecture. The bundle is ad-hoc signed for local use, not notarized or distributed.
 
-Implemented: a menu-bar app, borderless non-activating panel, transparent SceneKit view, fixed camera, lighting, blob shadow, model normalization, coat-B textures, cross-rig Collada animation transfer, a 24-clip controller with posture transitions and 0.25 s fades, persistent needs/care behavior, JSON save state, food/water/pet/play/call/rest controls, and base-clip preview controls. The 24 authored clips load and render in a bundled headless smoke; the corrected tail wag has no root seam. Clicking the Shiba calls it; click-drag strokes it; dragging the panel still moves the window. **Fetch depth, park walk, notifications, and long-duration soak remain.**
+The Shiba now moves without animation-menu clicks: needs-weighted fidgets, looking around, sitting and scratching, bounded walk/run motion, cursor gaze, naps, and return greetings. Hover to greet it, click to call, stroke to pet, and double-click to play. Food, water, rest, and activity preferences remain in the menu bar; clip selection is under **Animation diagnostics**. It uses the existing 24 authored clips, persistent needs, and atomic JSON saves. See [the aliveness plan and evidence](docs/ALIVENESS_PLAN.md) for implemented behavior and limits.
 
-The release build, signature verification and bundled headless smoke pass. The smoke covers feeding plus JSON reload, all 24 clip renders, and sleep/call/eat/drink/play/pet/idle transitions. `swift test` remains blocked by the local Command Line Tools installation's missing Swift Testing runtime.
+Bundled headless checks cover all 24 clips changing bone transforms, ten simulated unattended minutes, viewport containment, actual gesture hit-testing, gaze direction, posture interruptions, feeding, and save compatibility. A 60-second offscreen 720×480 / 4× MSAA run measured 2.55% CPU at 27.2 fps on the current M2 Max. This is not a live-window soak or visual acceptance. `swift test` remains blocked by the local Xcode/Command Line Tools runtime/license state.
 
 Blender 4.2.23 LTS on Windows successfully imports, authors and exports the rip. Blender 5.2.1 has no Collada import operator; use 4.2 LTS for animation work.
 
