@@ -15,6 +15,7 @@ struct NintendogsApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private(set) var panel: PetPanel?
+    private var notchTray: NotchTrayPanel?
     @Published var status = "Loading…"
     @Published var needs = PetNeeds()
     @Published var failure: String?
@@ -88,6 +89,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             panel.sceneHost.onCall = { [weak self] in self?.interact(.call) }
             panel.sceneHost.onStroke = { [weak self] in self?.interact(.pet) }
             panel.sceneHost.onPlay = { [weak self] in self?.interact(.play) }
+            if let screen = NotchTrayPanel.preferredScreen() {
+                let tray = NotchTrayPanel(screen: screen)
+                tray.onPick = { _ in }
+                tray.present()
+                notchTray = tray
+            }
             observePresence()
             refresh()
             if (7..<11).contains(localHour) { greet() }
