@@ -16,6 +16,7 @@ struct NintendogsApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private(set) var panel: PetPanel?
     private var notchTray: NotchTrayPanel?
+    private let heldItems = HeldItemSession()
     @Published var status = "Loading…"
     @Published var needs = PetNeeds()
     @Published var failure: String?
@@ -91,10 +92,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             panel.sceneHost.onPlay = { [weak self] in self?.interact(.play) }
             if let screen = NotchTrayPanel.preferredScreen() {
                 let tray = NotchTrayPanel(screen: screen)
-                tray.onPick = { _ in }
+                tray.onPick = { [weak self] item in self?.hold(item) }
+                tray.onNotchEntered = { [weak self] in self?.cancelHold() }
                 tray.present()
                 notchTray = tray
             }
+            heldItems.onClick = { [weak self] point, screen in
+                self?.throwHeld(at: point, on: screen)
+            }
+            heldItems.onCancel = { [weak self] in self?.cancelHold() }
             observePresence()
             refresh()
             if (7..<11).contains(localHour) { greet() }
@@ -240,6 +246,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         behavior?.interact(.idle, at: now)
         refresh()
         ambient?.greet(morning: morning)
+    }
+
+    func hold(_ item: ItemSprite) {
+        notchTray?.collapseTray()
+        if let screen = NotchTrayPanel.preferredScreen() {
+            heldItems.cancelRect = NotchTrayPanel.notchRect(on: screen)
+        }
+        heldItems.begin(item)
+    }
+
+    func cancelHold() {
+        heldItems.end()
+    }
+
+    /// U3 consumes the click and releases the held item. U6 routes the ball into the scene;
+    /// U7 routes bowls into the existing care loop.
+    func throwHeld(at point: NSPoint, on screen: NSScreen) {
+        guard screen === panel?.screen else { return }
+        heldItems.end()
     }
 
     private func save() {
