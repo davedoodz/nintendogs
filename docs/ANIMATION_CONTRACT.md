@@ -66,7 +66,7 @@ If step 1 fails (no armature, exploded weights), stop and report — the fallbac
 
 **Result: GO (2026-09-16).** Blender 4.2.23 preserved all 28 bones, the hierarchy, weights, UVs and materials. Its 30 sampled `tail1` matrices moved only the 58 tail-weighted vertices. The native Mac app transferred that channel by node name onto the original coat-B rig and played the one-second loop with no re-skinning or remap. Evidence: `blender/step0_validation.json`, `docs/screens/native-tailwag-a.png`, and `docs/screens/native-tailwag-b.png`.
 
-## Clip list (12)
+## Clip list (24)
 
 | File | Loop | Notes |
 | --- | --- | --- |
@@ -82,8 +82,22 @@ If step 1 fails (no armature, exploded weights), stop and report — the fallbac
 | `shiba_fetch_pickup.dae` | no | head dip, mouth close |
 | `shiba_happy.dae` | no | tail wag + bounce, used on pet/return |
 | `shiba_stretch.dae` | no | wake-up stretch |
+| `shiba_stand_from_sit.dae` | no | sit_idle → idle first frame; 45 frames |
+| `shiba_sit_from_lie.dae` | no | sleep/lie → sit_idle first frame; 60 frames |
+| `shiba_wake.dae` | no | sleep → sit_idle; head lifts before rising, ear flick; 60 frames |
+| `shiba_beg_loop.dae` | yes | hungry cue: seated, head tilted up, small head bob; 90 frames |
+| `shiba_yawn.dae` | no | idle → wide jaw opening/head back → idle first frame; 60 frames |
+| `shiba_scratch.dae` | no | seated hind-leg scratch gesture → sit_idle first frame; 75 frames; ear-contact limitation in `blender/CLIPS_RESULT.md` |
+| `shiba_look_around_loop.dae` | yes | bored idle variant: head turns left/right with pauses; 150 frames |
+| `shiba_drink_loop.dae` | yes | head down, six jaw-lapping cycles (faster than eat); 60 frames |
+| `shiba_alert.dae` | no | ears up, quick head turn toward viewer → idle first frame; 30 frames |
+| `shiba_pet_react.dae` | no | head tilt, ears back, distal horizontal tail wag → idle first frame; 75 frames |
+| `shiba_shake.dae` | no | head/chest/waist alternate small yaw → idle first frame; 45 frames |
+| `shiba_fetch_carry_loop.dae` | yes | accepted in-place walk cycle, head up, mouth closed; 40 frames |
 
 Locomotion is in-place; the app moves `skl_root`'s parent. Non-loop clips end on a pose the next state can start from (sit ends in sit_idle's first frame, etc.).
+
+The second tier (`stand_from_sit` through `fetch_carry_loop`) uses a stricter **under 7°** limit on `tail1`, `neck`, `Lleg1`/`Rleg1`, and `Larm1`/`Rarm1`. Its non-loop entry and final poses are checked against the accepted state clips' first frames. Rebuild with `blender/author_clips.py -- --tier2` and verify with `blender/verify_clips.py -- --tier2` in Blender 4.2 LTS. See `blender/tier2_validation.json` and `blender/tier2_roundtrip_validation.json`; these authoring checks do not replace Mac playback review.
 
 ## Export settings (Blender 4.2 Collada)
 

@@ -73,6 +73,29 @@ def positions(mesh):
     return points
 
 
+def read_clip_channels(path):
+    """Read delivered DAE matrices, including per-frame timing validation."""
+    root = ET.parse(path).getroot()
+    nodes, _, _ = source_rig(root)
+    names = {node.get("id"): name for name, node in nodes.items()}
+    sources = {n.get("id"): n for n in root.findall(".//c:source", NS)}
+    samplers = {n.get("id"): n for n in root.findall(".//c:sampler", NS)}
+    result = {}
+    for channel in root.findall(".//c:channel", NS):
+        target, transform = channel.get("target").split("/")
+        assert transform == "transform" and target in names
+        inputs = {i.get("semantic"): sources[i.get("source")[1:]]
+                  for i in samplers[channel.get("source")[1:]].findall("c:input", NS)}
+        times = [float(v) for v in inputs["INPUT"].find("c:float_array", NS).text.split()]
+        values = inputs["OUTPUT"].find("c:float_array", NS).text.split()
+        assert len(values) == 16 * len(times)
+        assert all(abs(b - a - 1 / 30) < 1e-5 for a, b in zip(times, times[1:]))
+        assert abs(times[0] - 1 / 30) < 1e-5
+        result[names[target]] = [matrix(" ".join(values[i:i+16])) for i in range(0, len(values), 16)]
+    assert len(result) == 28
+    return result
+
+
 class Rig:
     def __init__(self):
         assert bpy.app.version[:2] == (4, 2)
@@ -129,6 +152,7 @@ class Rig:
         self.set_pose({})
         up = self.arm.matrix_world.to_3x3() @ Vector((0, 1, 0))
         floor = min(v.dot(up) for v in self.rest_points)
+        previous_rotations = {}
         for frame in range(1, frames + 1):
             self.set_pose(pose_function((frame - 1) / (frames - 1)))
             if floor_contact:
@@ -137,6 +161,13 @@ class Rig:
                 bpy.context.view_layer.update()
             for joint in list(keyed_bones or self.nodes):
                 bone = self.arm.pose.bones[joint]
+                # q and -q describe the same pose; keep one hemisphere so
+                # component interpolation cannot spin when a joint crosses 180°.
+                rotation = bone.rotation_quaternion.copy()
+                if joint in previous_rotations and previous_rotations[joint].dot(rotation) < 0:
+                    rotation.negate()
+                    bone.rotation_quaternion = rotation
+                previous_rotations[joint] = rotation
                 bone.keyframe_insert("rotation_quaternion", frame=frame, group=joint)
                 if joint == "skl_root":
                     bone.keyframe_insert("location", frame=frame, group=joint)
@@ -170,7 +201,7 @@ class Rig:
         bpy.ops.wm.save_as_mainfile(filepath=str(path))
         bpy.ops.object.mode_set(mode="OBJECT")
 
-    def export(self, name, full_pose=True):
+    def export(self, name, full_pose=True, joint_limit=10):
         # Source posed global = sampled Blender global @ inverse(Blender rest)
         #                       @ source rest. Recompute parent-relative matrices.
         self.activate(self.actions[name])
@@ -182,7 +213,7 @@ class Rig:
             for joint in limits:
                 angle = math.degrees(self.arm.pose.bones[joint].rotation_quaternion.angle)
                 limits[joint] = max(limits[joint], min(angle, 360 - angle))
-        assert max(limits.values()) < 10, limits
+        assert max(limits.values()) < joint_limit, limits
         self.scene.frame_set(1)
         assert self.mesh_signature() == self.signature
         bpy.ops.object.select_all(action="DESELECT")

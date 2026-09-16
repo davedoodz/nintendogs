@@ -243,4 +243,8 @@ def build(render=True):
 
 
 if __name__ == "__main__":
-    build(render="--no-render" not in sys.argv)
+    if "--tier2" in sys.argv:
+        from tier2_clips import build_tier2
+        build_tier2(render="--no-render" not in sys.argv)
+    else:
+        build(render="--no-render" not in sys.argv)

@@ -1,0 +1,228 @@
+{
+  "shiba_alert": {
+    "minimum_world_height": -0.0015789568424224854,
+    "max_joint_step_degrees": 9.19135568400854,
+    "body_joint_max_degrees": {
+      "tail1": 0,
+      "neck": 0,
+      "Lleg1": 0,
+      "Rleg1": 0,
+      "Larm1": 0,
+      "Rarm1": 0
+    },
+    "entry": {
+      "state": "shiba_idle_loop",
+      "max_matrix_error": 0.0
+    },
+    "handoff": {
+      "state": "shiba_idle_loop",
+      "max_matrix_error": 0.0
+    },
+    "fresh_dae_max_vertex_error": 1.2894456179609261e-06
+  },
+  "shiba_beg_loop": {
+    "minimum_world_height": -0.00157878955360502,
+    "max_joint_step_degrees": 0.2880353205192259,
+    "body_joint_max_degrees": {
+      "tail1": 0,
+      "neck": 0,
+      "Lleg1": 0,
+      "Rleg1": 0,
+      "Larm1": 0,
+      "Rarm1": 0
+    },
+    "loop_endpoint_max_error": 0.0,
+    "fresh_dae_max_vertex_error": 1.349213542152108e-06
+  },
+  "shiba_drink_loop": {
+    "minimum_world_height": -0.0015789568424224854,
+    "max_joint_step_degrees": 2.511706444623809,
+    "body_joint_max_degrees": {
+      "tail1": 0,
+      "neck": 4.999813305004754,
+      "Lleg1": 0,
+      "Rleg1": 0,
+      "Larm1": 0,
+      "Rarm1": 0
+    },
+    "loop_endpoint_max_error": 0.0,
+    "fresh_dae_max_vertex_error": 1.3058723390225556e-06
+  },
+  "shiba_fetch_carry_loop": {
+    "minimum_world_height": 0.023420892655849457,
+    "max_joint_step_degrees": 10.294309999107831,
+    "body_joint_max_degrees": {
+      "tail1": 0,
+      "neck": 0,
+      "Lleg1": 3.9966271362250163,
+      "Rleg1": 3.9966271362250163,
+      "Larm1": 3.999955572784928,
+      "Rarm1": 3.999955572784928
+    },
+    "loop_endpoint_max_error": 0.0,
+    "root_matrix_range": 0.0,
+    "mouth_matrix_range": 9.5367431640625e-07,
+    "fresh_dae_max_vertex_error": 1.353957258653706e-06
+  },
+  "shiba_look_around_loop": {
+    "minimum_world_height": -0.0015789568424224854,
+    "max_joint_step_degrees": 3.2792101059030876,
+    "body_joint_max_degrees": {
+      "tail1": 0,
+      "neck": 0,
+      "Lleg1": 0,
+      "Rleg1": 0,
+      "Larm1": 0,
+      "Rarm1": 0
+    },
+    "loop_endpoint_max_error": 0.0,
+    "fresh_dae_max_vertex_error": 2.3511747030396486e-06
+  },
+  "shiba_pet_react": {
+    "minimum_world_height": -0.0015789568424224854,
+    "max_joint_step_degrees": 4.568438620707436,
+    "body_joint_max_degrees": {
+      "tail1": 0,
+      "neck": 0,
+      "Lleg1": 0,
+      "Rleg1": 0,
+      "Larm1": 0,
+      "Rarm1": 0
+    },
+    "entry": {
+      "state": "shiba_idle_loop",
+      "max_matrix_error": 0.0
+    },
+    "handoff": {
+      "state": "shiba_idle_loop",
+      "max_matrix_error": 0.0
+    },
+    "fresh_dae_max_vertex_error": 1.338120956459263e-06
+  },
+  "shiba_scratch": {
+    "minimum_world_height": -0.00157878955360502,
+    "max_joint_step_degrees": 9.283133789659647,
+    "body_joint_max_degrees": {
+      "tail1": 0,
+      "neck": 0,
+      "Lleg1": 4.999813305004754,
+      "Rleg1": 0,
+      "Larm1": 0,
+      "Rarm1": 0
+    },
+    "entry": {
+      "state": "shiba_sit_idle_loop",
+      "max_matrix_error": 0.0
+    },
+    "handoff": {
+      "state": "shiba_sit_idle_loop",
+      "max_matrix_error": 0.0
+    },
+    "fresh_dae_max_vertex_error": 1.5554414213538037e-06
+  },
+  "shiba_shake": {
+    "minimum_world_height": -0.0015789568424224854,
+    "max_joint_step_degrees": 6.761564978761164,
+    "body_joint_max_degrees": {
+      "tail1": 0,
+      "neck": 0,
+      "Lleg1": 0,
+      "Rleg1": 0,
+      "Larm1": 0,
+      "Rarm1": 0
+    },
+    "entry": {
+      "state": "shiba_idle_loop",
+      "max_matrix_error": 0.0
+    },
+    "handoff": {
+      "state": "shiba_idle_loop",
+      "max_matrix_error": 0.0
+    },
+    "fresh_dae_max_vertex_error": 1.301785091629121e-06
+  },
+  "shiba_sit_from_lie": {
+    "minimum_world_height": -0.0015791369369253516,
+    "max_joint_step_degrees": 3.466504138228592,
+    "body_joint_max_degrees": {
+      "tail1": 0,
+      "neck": 2.999704464357591,
+      "Lleg1": 0,
+      "Rleg1": 0,
+      "Larm1": 0,
+      "Rarm1": 0
+    },
+    "entry": {
+      "state": "shiba_sleep_loop",
+      "max_matrix_error": 0.0
+    },
+    "handoff": {
+      "state": "shiba_sit_idle_loop",
+      "max_matrix_error": 0.0
+    },
+    "fresh_dae_max_vertex_error": 1.6214216361922555e-06
+  },
+  "shiba_stand_from_sit": {
+    "minimum_world_height": -0.0015793167985975742,
+    "max_joint_step_degrees": 7.003591451340096,
+    "body_joint_max_degrees": {
+      "tail1": 0,
+      "neck": 0,
+      "Lleg1": 0,
+      "Rleg1": 0,
+      "Larm1": 0,
+      "Rarm1": 0
+    },
+    "entry": {
+      "state": "shiba_sit_idle_loop",
+      "max_matrix_error": 0.0
+    },
+    "handoff": {
+      "state": "shiba_idle_loop",
+      "max_matrix_error": 0.0
+    },
+    "fresh_dae_max_vertex_error": 1.4884014993734175e-06
+  },
+  "shiba_wake": {
+    "minimum_world_height": -0.0015790744218975306,
+    "max_joint_step_degrees": 6.159120949624882,
+    "body_joint_max_degrees": {
+      "tail1": 0,
+      "neck": 2.999704464357591,
+      "Lleg1": 0,
+      "Rleg1": 0,
+      "Larm1": 0,
+      "Rarm1": 0
+    },
+    "entry": {
+      "state": "shiba_sleep_loop",
+      "max_matrix_error": 0.0
+    },
+    "handoff": {
+      "state": "shiba_sit_idle_loop",
+      "max_matrix_error": 0.0
+    },
+    "fresh_dae_max_vertex_error": 2.252393201314352e-06
+  },
+  "shiba_yawn": {
+    "minimum_world_height": -0.0015789568424224854,
+    "max_joint_step_degrees": 3.5131605201187144,
+    "body_joint_max_degrees": {
+      "tail1": 0,
+      "neck": 1.999901587094536,
+      "Lleg1": 0,
+      "Rleg1": 0,
+      "Larm1": 0,
+      "Rarm1": 0
+    },
+    "entry": {
+      "state": "shiba_idle_loop",
+      "max_matrix_error": 0.0
+    },
+    "handoff": {
+      "state": "shiba_idle_loop",
+      "max_matrix_error": 0.0
+    },
+    "fresh_dae_max_vertex_error": 1.2839233415448956e-06
+  }
+}
