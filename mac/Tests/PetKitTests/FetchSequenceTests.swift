@@ -2,165 +2,140 @@ import Testing
 import Foundation
 @testable import PetKit
 
-private let epsilon = 1e-6
+private let clips = FetchSequence.ClipDurations(pickup: 0.5, happy: 0.75)
 
-@Test func phasesRunInOrderWithMatchingClipsForAFourUnitThrow() {
-    let home = SIMD2<Double>(0, 0)
-    let ball = SIMD2<Double>(0, 4)
-    let clips = FetchSequence.ClipDurations(pickup: 0.5, happy: 0.75)
-    let runDuration = 4.0 / FetchSequence.runSpeed
-    let carryDuration = 4.0 / FetchSequence.carrySpeed
-    let expectedTotal = FetchSequence.turnDuration + runDuration + clips.pickup
-        + FetchSequence.turnDuration + carryDuration + FetchSequence.dropDuration + clips.happy
-
-    let base = FetchSequence(home: home, ball: ball, clipDurations: clips)
-    #expect(abs(base.totalDuration - expectedTotal) < 1e-9)
-    #expect(base.phase == .turnToBall)
-    #expect(base.clip == "shiba_run_loop")
-
-    let boundaries: [(phase: FetchSequence.Phase, clip: String?, at: TimeInterval)] = [
-        (.run, "shiba_run_loop", FetchSequence.turnDuration),
-        (.pickup, "shiba_fetch_pickup", FetchSequence.turnDuration + runDuration),
-        (.turnHome, "shiba_fetch_carry_loop", FetchSequence.turnDuration + runDuration + clips.pickup),
-        (.carry, "shiba_fetch_carry_loop", 2 * FetchSequence.turnDuration + runDuration + clips.pickup),
-        (.drop, "shiba_fetch_carry_loop", 2 * FetchSequence.turnDuration + runDuration + clips.pickup + carryDuration),
-        (.celebrate, "shiba_happy", 2 * FetchSequence.turnDuration + runDuration + clips.pickup + carryDuration + FetchSequence.dropDuration),
-        (.done, nil, expectedTotal),
-    ]
-
-    for (expectedPhase, expectedClip, boundary) in boundaries {
-        var before = base
-        before.advance(by: boundary - epsilon)
-        #expect(before.phase != expectedPhase, "still mid-phase just before \(boundary)s")
-
-        var after = base
-        after.advance(by: boundary + epsilon)
-        #expect(after.phase == expectedPhase, "phase should be \(expectedPhase) just after \(boundary)s")
-        #expect(after.clip == expectedClip)
+/// Runs `sequence` forward in 1/60 s ticks until `until` holds or the budget runs out,
+/// mirroring how the app's loop drives it.
+private func run(
+    _ sequence: inout FetchSequence,
+    seconds budget: TimeInterval = 20,
+    tick: TimeInterval = 1.0 / 60,
+    step: ((inout FetchSequence) -> Void)? = nil,
+    until: (FetchSequence) -> Bool
+) -> Bool {
+    var elapsed: TimeInterval = 0
+    while elapsed < budget {
+        if until(sequence) { return true }
+        step?(&sequence)
+        sequence.advance(by: tick)
+        elapsed += tick
     }
+    return until(sequence)
 }
 
-@Test func positionAndHeadingSettleAtHomeAndCameraWhenDone() {
-    let home = SIMD2<Double>(1, 2)
-    let ball = SIMD2<Double>(-3, 6)
-    let sequence0 = FetchSequence(home: home, ball: ball, clipDurations: .init(pickup: 0.3, happy: 0.4))
-    var sequence = sequence0
-    let total = sequence0.totalDuration
-    sequence.advance(by: total + 5) // overshoot; extra time is discarded, not carried past `done`
-    #expect(sequence.phase == .done)
-    #expect(sequence.position == home)
-    #expect(sequence.heading == 0)
-    #expect(sequence.clip == nil)
-    #expect(sequence.ballAttached == false)
-    #expect(sequence.ballPosition == home + SIMD2<Double>(0.35, 0.3))
+@Test func theDogRunsAtTheBallFromTheThrowAndPicksItUpOnceItRests() {
+    var sequence = FetchSequence(
+        home: SIMD2(0, 0), ball: SIMD2(0, -4), returnTo: SIMD2(0, 0), clipDurations: clips
+    )
+    #expect(sequence.phase == .chase, "the chase starts at the throw, not at the landing")
+    #expect(sequence.clip == "shiba_run_loop")
+
+    // Ball still bouncing: the dog reaches it and waits rather than mouthing a moving ball.
+    let reached = run(&sequence, step: { $0.updateBall(position: SIMD2(0, -4), atRest: false) }) {
+        $0.phase == .watch
+    }
+    #expect(reached)
+    #expect(sequence.clip == "shiba_alert")
+    #expect(abs(sequence.position.y - -4) <= FetchSequence.pickupRadius + 1e-6)
+
+    sequence.updateBall(position: SIMD2(0, -4), atRest: true)
+    sequence.advance(by: 1.0 / 60)
+    #expect(sequence.phase == .pickup)
+    #expect(sequence.clip == "shiba_fetch_pickup")
 }
 
-@Test func headingFacesTheBallWhileRunningAndTheCameraWhileCelebrating() {
-    let home = SIMD2<Double>(0, 0)
-    let ball = SIMD2<Double>(3, 0) // straight along +x -> heading atan2(3, 0) == pi/2
-    let clips = FetchSequence.ClipDurations(pickup: 0.2, happy: 0.3)
-    let base = FetchSequence(home: home, ball: ball, clipDurations: clips)
-
-    var duringRun = base
-    duringRun.advance(by: FetchSequence.turnDuration + 0.05)
-    #expect(duringRun.phase == .run)
-    #expect(abs(duringRun.heading - .pi / 2) < 1e-9, "heading should face the ball while running")
-
-    var duringCelebrate = base
-    duringCelebrate.advance(by: base.totalDuration - 0.05)
-    #expect(duringCelebrate.phase == .celebrate)
-    #expect(duringCelebrate.heading == 0, "heading should face the camera while celebrating")
+@Test func theChaseFollowsTheBallToWhereItActuallyStops() {
+    var sequence = FetchSequence(
+        home: SIMD2(0, 0), ball: SIMD2(0, -3), returnTo: SIMD2(0, 0), clipDurations: clips
+    )
+    // Predicted rest was -3; the ball bounces on to -5 while the dog is running.
+    var moved = false
+    let arrived = run(&sequence, step: { sequence in
+        if !moved, sequence.position.y < -1 {
+            moved = true
+            sequence.updateBall(position: SIMD2(1.5, -5), atRest: true)
+        }
+    }) { $0.phase == .pickup }
+    #expect(arrived)
+    let offset = sequence.position - SIMD2(1.5, -5)
+    #expect((offset.x * offset.x + offset.y * offset.y).squareRoot() <= FetchSequence.pickupRadius + 1e-6)
 }
 
-@Test func ballAttachedOnlyFromTurnHomeThroughCarry() {
-    let home = SIMD2<Double>(0, 0)
-    let ball = SIMD2<Double>(2, 0)
-    let clips = FetchSequence.ClipDurations(pickup: 0.4, happy: 0.5)
-    let base = FetchSequence(home: home, ball: ball, clipDurations: clips)
-    let runDuration = 2.0 / FetchSequence.runSpeed
-    let carryDuration = 2.0 / FetchSequence.carrySpeed
+@Test func theBallIsCarriedToTheLatestReturnTargetAndDroppedInFrontOfTheDog() {
+    var sequence = FetchSequence(
+        home: SIMD2(0, 0), ball: SIMD2(0, -3), returnTo: SIMD2(0, 0), clipDurations: clips
+    )
+    sequence.updateBall(position: SIMD2(0, -3), atRest: true)
+    let carrying = run(&sequence) { $0.phase == .carry }
+    #expect(carrying)
+    #expect(sequence.ballAttached, "the ball travels in the mouth while carrying")
 
-    var duringPickup = base
-    duringPickup.advance(by: FetchSequence.turnDuration + runDuration + 0.1)
-    #expect(duringPickup.phase == .pickup)
-    #expect(duringPickup.ballAttached == false)
+    // The thrower's cursor moved during the trip; the dog ends up at the new spot.
+    let target = SIMD2<Double>(-1.2, -0.5)
+    let dropped = run(&sequence, step: { $0.updateReturn(to: target) }) { $0.phase == .drop }
+    #expect(dropped)
+    let miss = sequence.position - target
+    #expect((miss.x * miss.x + miss.y * miss.y).squareRoot() <= FetchSequence.arrivalRadius + 1e-6)
+    #expect(!sequence.ballAttached, "the ball is on the ground from the drop onward")
 
-    let toPickupEnd = FetchSequence.turnDuration + runDuration + clips.pickup
-    var duringTurnHome = base
-    duringTurnHome.advance(by: toPickupEnd + 0.01)
-    #expect(duringTurnHome.phase == .turnHome)
-    #expect(duringTurnHome.ballAttached == true)
+    let ahead = sequence.ballPosition - sequence.position
+    let distance = (ahead.x * ahead.x + ahead.y * ahead.y).squareRoot()
+    #expect(abs(distance - 0.35) < 1e-9, "the ball lands ahead of the muzzle, not on the paws")
 
-    let toCarryStart = toPickupEnd + FetchSequence.turnDuration
-    var duringCarry = base
-    duringCarry.advance(by: toCarryStart + 0.1)
-    #expect(duringCarry.phase == .carry)
-    #expect(duringCarry.ballAttached == true)
-
-    var duringDrop = base
-    duringDrop.advance(by: toCarryStart + carryDuration + 0.01)
-    #expect(duringDrop.phase == .drop)
-    #expect(duringDrop.ballAttached == false)
-}
-
-@Test func ballPositionTracksLandingSpotThenTheDogThenTheDropSpot() {
-    let home = SIMD2<Double>(0, 0)
-    let ball = SIMD2<Double>(2, 0)
-    let clips = FetchSequence.ClipDurations(pickup: 0.4, happy: 0.5)
-    let base = FetchSequence(home: home, ball: ball, clipDurations: clips)
-    let runDuration = 2.0 / FetchSequence.runSpeed
-
-    var duringRun = base
-    duringRun.advance(by: FetchSequence.turnDuration + 0.1)
-    #expect(duringRun.phase == .run)
-    #expect(duringRun.ballPosition == ball, "ball waits at the landing spot until picked up")
-
-    let toCarryStart = 2 * FetchSequence.turnDuration + runDuration + clips.pickup
-    var duringCarry = base
-    duringCarry.advance(by: toCarryStart + 0.1)
-    #expect(duringCarry.phase == .carry)
-    #expect(duringCarry.ballPosition == duringCarry.position, "ball follows the dog while attached")
-
-    var afterDrop = base
-    afterDrop.advance(by: base.totalDuration - clips.happy - 0.01)
-    #expect(afterDrop.phase == .drop)
-    #expect(afterDrop.ballPosition == home + SIMD2<Double>(0.35, 0.3))
-}
-
-@Test func aLargeAdvanceInOneCallCrossesSeveralPhases() {
-    let home = SIMD2<Double>(0, 0)
-    let ball = SIMD2<Double>(1, 0)
-    var sequence = FetchSequence(home: home, ball: ball, clipDurations: .init(pickup: 0.1, happy: 0.1))
-    #expect(sequence.phase == .turnToBall)
-    sequence.advance(by: sequence.totalDuration) // one catch-up step covering all 7 timed phases
-    #expect(sequence.phase == .done)
-    #expect(sequence.position == home)
-}
-
-@Test func nonPositiveOrNonFiniteAdvanceIsANoOp() {
-    let home = SIMD2<Double>(0, 0)
-    let ball = SIMD2<Double>(2, 0)
-    var sequence = FetchSequence(home: home, ball: ball, clipDurations: .init(pickup: 0.2, happy: 0.2))
+    // Once dropped, the ball stops tracking a moving cursor.
+    let restingBall = sequence.ballPosition
+    sequence.updateReturn(to: SIMD2(3, -2))
     sequence.advance(by: 0.1)
-    let snapshot = sequence
+    #expect(sequence.ballPosition == restingBall)
+}
+
+@Test func theTripEndsFacingTheCameraAndStaysDone() {
+    var sequence = FetchSequence(
+        home: SIMD2(0, 0), ball: SIMD2(2, -2), returnTo: SIMD2(0, 0), clipDurations: clips
+    )
+    sequence.updateBall(position: SIMD2(2, -2), atRest: true)
+    #expect(run(&sequence) { $0.phase == .done })
+    #expect(sequence.clip == nil)
+    #expect(abs(sequence.heading) < 0.2, "the dog turns back to the camera to celebrate")
+
+    let resting = sequence.position
+    sequence.advance(by: 5)
+    #expect(sequence.phase == .done)
+    #expect(sequence.position == resting)
+}
+
+@Test func aLargeCatchUpStepFollowsTheSamePathAsManySmallOnes() {
+    let base = FetchSequence(
+        home: SIMD2(0, 0), ball: SIMD2(1, -4), returnTo: SIMD2(0.5, -0.5), clipDurations: clips
+    )
+    var fine = base
+    fine.updateBall(position: SIMD2(1, -4), atRest: true)
+    var coarse = fine
+
+    for _ in 0..<360 { fine.advance(by: FetchSequence.step) }
+    coarse.advance(by: 360 * FetchSequence.step)
+
+    #expect(fine.phase == coarse.phase)
+    let drift = fine.position - coarse.position
+    #expect((drift.x * drift.x + drift.y * drift.y).squareRoot() < 1e-9)
+}
+
+@Test func nonAdvancingTimeIsIgnored() {
+    var sequence = FetchSequence(
+        home: SIMD2(0, 0), ball: SIMD2(0, -2), returnTo: SIMD2(0, 0), clipDurations: clips
+    )
+    let before = sequence
     sequence.advance(by: 0)
     sequence.advance(by: -1)
     sequence.advance(by: .nan)
-    sequence.advance(by: .infinity)
-    #expect(sequence == snapshot)
+    #expect(sequence == before)
 }
 
-@Test func zeroDistanceThrowNeverProducesANonFiniteHeading() {
-    let spot = SIMD2<Double>(1, 1)
-    let clips = FetchSequence.ClipDurations(pickup: 0.2, happy: 0.2)
-    var sequence = FetchSequence(home: spot, ball: spot, clipDurations: clips)
-    var iterations = 0
-    while sequence.phase != .done, iterations < 1000 {
-        sequence.advance(by: 0.05)
-        #expect(sequence.heading.isFinite)
-        #expect(sequence.heading == 0, "coincident home/ball has no direction, so heading stays facing the camera")
-        #expect(sequence.position == spot)
-        iterations += 1
-    }
-    #expect(sequence.phase == .done)
+@Test func theEstimatedTripCoversBothLegsAndBothClips() {
+    let sequence = FetchSequence(
+        home: SIMD2(0, 0), ball: SIMD2(0, -4), returnTo: SIMD2(0, 0), clipDurations: clips
+    )
+    let expected = 4 / FetchSequence.runSpeed + clips.pickup + FetchSequence.turnDuration
+        + 4 / FetchSequence.carrySpeed + FetchSequence.dropDuration + clips.happy
+    #expect(abs(sequence.estimatedDuration - expected) < 1e-9)
 }
