@@ -1,5 +1,6 @@
 import SceneKit
 import AppKit
+import PetKit
 
 /// Transparent SceneKit view with the DS-style fixed camera (KTD4), warm light and a blob shadow.
 final class SceneHost: SCNView {
@@ -11,6 +12,13 @@ final class SceneHost: SCNView {
     private let petAnchor = SCNNode()
     private let blobShadow = SCNNode()
     private var petClickPoint: CGPoint?
+    var onCall: (() -> Void)?
+    var onStroke: (() -> Void)?
+    private var stroked = false
+    private var lastStrokeTime: TimeInterval = 0
+    private let bowl = SCNNode()
+    private let bowlContents = SCNNode()
+    private var displayedActivity: PetActivity?
 
     override init(frame: NSRect, options: [String: Any]? = nil) {
         super.init(frame: frame, options: options)
@@ -69,6 +77,15 @@ final class SceneHost: SCNView {
         scene.rootNode.addChildNode(blobShadow)
 
         scene.rootNode.addChildNode(petAnchor)
+        let rim = SCNTorus(ringRadius: 0.13, pipeRadius: 0.025)
+        rim.firstMaterial?.diffuse.contents = NSColor.systemOrange
+        bowl.geometry = rim
+        bowl.position = SCNVector3(0, 0.04, 0.55)
+        let contents = SCNCylinder(radius: 0.12, height: 0.02)
+        bowlContents.geometry = contents
+        bowl.addChildNode(bowlContents)
+        bowl.isHidden = true
+        scene.rootNode.addChildNode(bowl)
     }
 
     func setPet(_ node: SCNNode) {
@@ -88,7 +105,28 @@ final class SceneHost: SCNView {
         setNeedsDisplay(bounds)
     }
 
+    func showCare(activity: PetActivity, needs: PetNeeds) {
+        let caring = activity == .eat || activity == .drink
+        if displayedActivity != activity {
+            displayedActivity = activity
+            petAnchor.removeAction(forKey: "approach")
+            let destination = SCNVector3(0, 0, activity == .call ? 0.3 : 0)
+            petAnchor.runAction(.move(to: destination, duration: 0.8), forKey: "approach")
+        }
+        bowl.isHidden = !caring
+        if caring {
+            bowlContents.geometry?.firstMaterial?.diffuse.contents =
+                activity == .drink ? NSColor.systemBlue : NSColor.brown
+            let deficit = activity == .drink ? needs.thirst : needs.hunger
+            bowlContents.scale = SCNVector3(1, max(0.05, deficit / 100), 1)
+            petAnchor.eulerAngles.y = .pi
+        } else if activity == .call {
+            petAnchor.eulerAngles.y = .pi
+        }
+    }
+
     override func mouseDown(with event: NSEvent) {
+        stroked = false
         let point = convert(event.locationInWindow, from: nil)
         let hit = hitTest(point, options: [SCNHitTestOption.firstFoundOnly: true])
         if let node = hit.first?.node, isPetNode(node) {
@@ -99,6 +137,23 @@ final class SceneHost: SCNView {
         super.mouseDown(with: event)
     }
 
+    override func mouseDragged(with event: NSEvent) {
+        guard let start = petClickPoint else {
+            super.mouseDragged(with: event)
+            return
+        }
+        let point = convert(event.locationInWindow, from: nil)
+        guard hypot(point.x - start.x, point.y - start.y) >= 8 else { return }
+        stroked = true
+        let hit = hitTest(point, options: [.firstFoundOnly: true])
+        guard let node = hit.first?.node, isPetNode(node) else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - lastStrokeTime >= 1 {
+            lastStrokeTime = now
+            onStroke?()
+        }
+    }
+
     override func mouseUp(with event: NSEvent) {
         defer { petClickPoint = nil }
         guard let start = petClickPoint else {
@@ -107,8 +162,8 @@ final class SceneHost: SCNView {
         }
         let end = convert(event.locationInWindow, from: nil)
         let distance = hypot(end.x - start.x, end.y - start.y)
-        guard distance < 8 else { return }
-        rotatePet()
+        guard !stroked, distance < 8 else { return }
+        onCall?()
     }
 
     private func isPetNode(_ node: SCNNode) -> Bool {

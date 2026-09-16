@@ -10,7 +10,7 @@ final class PetPanel: NSPanel {
         let origin = NSPoint(x: screen.maxX - size.width - 24, y: screen.minY + 24)
         super.init(
             contentRect: NSRect(origin: origin, size: size),
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.borderless, .nonactivatingPanel, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -22,7 +22,10 @@ final class PetPanel: NSPanel {
         isMovableByWindowBackground = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         isReleasedWhenClosed = false
-        setFrameAutosaveName("PetPanel")   // R3: position persists
+        minSize = NSSize(width: 360, height: 240)
+        maxSize = NSSize(width: 1080, height: 720)
+        setFrameUsingName("PetPanel")
+        setFrameAutosaveName("PetPanel")
         contentView = sceneHost
     }
 

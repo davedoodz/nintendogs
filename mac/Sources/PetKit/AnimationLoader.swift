@@ -1,16 +1,29 @@
 import Foundation
 import SceneKit
 
-public struct AppliedAnimationClip {
-    public let duration: TimeInterval
-    public let targetNames: [String]
+/// One imported animation channel: the rig node it targets (by name) and the
+/// sampled motion for that node, straight out of the exported Collada file.
+struct AnimationChannel {
+    let nodeName: String
+    let animation: SCNAnimation
 }
 
-public enum AnimationLoader {
-    public enum Error: Swift.Error, LocalizedError {
+/// A fully parsed clip file, not yet attached to any rig. Parsing never
+/// mutates a scene graph, so a caller can validate every channel against a
+/// target rig before deciding whether to attach anything.
+struct LoadedClip {
+    let name: String
+    let duration: TimeInterval
+    let channels: [AnimationChannel]
+}
+
+/// Internal to `PetKit`: only `AnimationController` parses clips. Nothing
+/// outside the package touches `AnimationLoader` directly anymore.
+enum AnimationLoader {
+    enum Error: Swift.Error, LocalizedError {
         case noMatchingChannels(URL)
 
-        public var errorDescription: String? {
+        var errorDescription: String? {
             switch self {
             case .noMatchingChannels(let url):
                 "No animation channels in \(url.lastPathComponent) matched the pet rig."
@@ -18,37 +31,24 @@ public enum AnimationLoader {
         }
     }
 
-    /// Copies animation players from an exported rig onto matching nodes in the loaded pet rig.
-    @discardableResult
-    public static func apply(
-        _ url: URL,
-        to root: SCNNode,
-        key: String,
-        repeats: Bool
-    ) throws -> AppliedAnimationClip {
+    /// Parses a Collada clip into raw per-node channels. Read-only: it never
+    /// touches a pet rig, so callers can validate before mutating anything.
+    static func load(_ url: URL, name: String) throws -> LoadedClip {
         let clipScene = try SCNScene(url: url, options: ModelLoader.colladaOptions)
         var duration: TimeInterval = 0
-        var targetNames: [String] = []
+        var channels: [AnimationChannel] = []
 
         clipScene.rootNode.enumerateHierarchy { sourceNode, _ in
-            guard
-                let name = sourceNode.name,
-                let targetNode = root.childNode(withName: name, recursively: true)
-            else { return }
-
-            for sourceKey in sourceNode.animationKeys {
-                guard let sourcePlayer = sourceNode.animationPlayer(forKey: sourceKey) else { continue }
-                let animation = sourcePlayer.animation
-                animation.repeatCount = repeats ? .infinity : 1
-                let player = SCNAnimationPlayer(animation: animation)
-                targetNode.addAnimationPlayer(player, forKey: "\(key).\(sourceKey)")
-                player.play()
+            guard let nodeName = sourceNode.name else { return }
+            for key in sourceNode.animationKeys {
+                guard let player = sourceNode.animationPlayer(forKey: key) else { continue }
+                let animation = player.animation
                 duration = max(duration, animation.duration)
-                if !targetNames.contains(name) { targetNames.append(name) }
+                channels.append(AnimationChannel(nodeName: nodeName, animation: animation))
             }
         }
 
-        guard !targetNames.isEmpty else { throw Error.noMatchingChannels(url) }
-        return AppliedAnimationClip(duration: duration, targetNames: targetNames)
+        guard !channels.isEmpty else { throw Error.noMatchingChannels(url) }
+        return LoadedClip(name: name, duration: duration, channels: channels)
     }
 }
