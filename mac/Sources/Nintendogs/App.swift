@@ -297,8 +297,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             heldItems.end()
             beginFetch(to: ground)
         case .foodBowl, .waterBowl:
-            // U7 routes bowls into the existing care interactions.
             heldItems.end()
+            ballExpiresAt = nil
+            panel.sceneHost.removeBall()
+            interact(item == .foodBowl ? .eat : .drink)
         }
     }
 
