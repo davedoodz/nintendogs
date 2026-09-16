@@ -36,6 +36,7 @@ for action in list(bpy.data.actions):
     body_limits = {joint: 0 for joint in BODY_JOINTS}
     previous = None
     pad_facing = 1.0
+    idle_chest_angle = idle_head_pitch = 0.0
     for frame in range(1, end + 1):
         scene.frame_set(frame)
         points = positions(mesh)
@@ -43,6 +44,11 @@ for action in list(bpy.data.actions):
         if frame in frames:
             expected[action.name][frame] = points
         current = [b.rotation_quaternion.copy() for b in arm.pose.bones]
+        if action.name == 'shiba_idle_loop':
+            idle_chest_angle = max(idle_chest_angle, math.degrees(arm.pose.bones['chest'].rotation_quaternion.angle))
+            basis = arm.data.bones['head'].matrix_local.to_quaternion()
+            source_rotation = basis @ arm.pose.bones['head'].rotation_quaternion @ basis.inverted()
+            idle_head_pitch = max(idle_head_pitch, abs(math.degrees(source_rotation.to_euler('XYZ').x)))
         if tier3 and action.name == 'shiba_paws_up_loop':
             for joint in ['Lhand2', 'Rhand2']:
                 deformation = arm.pose.bones[joint].matrix @ arm.data.bones[joint].matrix_local.inverted()
@@ -55,6 +61,11 @@ for action in list(bpy.data.actions):
             max_step = max(max_step, max(math.degrees(a.rotation_difference(b).angle) for a, b in zip(previous, current)))
         previous = current
     reports[action.name] = dict(minimum_world_height=floor_min, max_joint_step_degrees=max_step)
+    if action.name == 'shiba_idle_loop':
+        assert idle_chest_angle < 1e-4 and idle_head_pitch < 1e-4
+        reports[action.name]['runtime_breathing_handoff'] = dict(
+            max_chest_rotation_degrees=idle_chest_angle, max_source_head_pitch_degrees=idle_head_pitch,
+            authored_breathing_removed=True)
     if tier3 and action.name == 'shiba_paws_up_loop':
         assert pad_facing > .97, ('Pads must face source +Z / camera', pad_facing)
         reports[action.name]['minimum_pad_normal_dot_forward'] = pad_facing

@@ -70,7 +70,7 @@ If step 1 fails (no armature, exploded weights), stop and report — the fallbac
 
 | File | Loop | Notes |
 | --- | --- | --- |
-| `shiba_idle_loop.dae` | yes | breathing, ear flick; 90–120 frames |
+| `shiba_idle_loop.dae` | yes | small head yaw, ear flick; chest/head breathing left to runtime; 120 frames |
 | `shiba_sit.dae` | no | stand → sit, ends held |
 | `shiba_sit_idle_loop.dae` | yes | seated breathing |
 | `shiba_lie_down.dae` | no | sit → lie, ends held |

@@ -22,7 +22,12 @@
   "shiba_idle_loop": {
     "minimum_world_height": -0.0015789568424224854,
     "max_joint_step_degrees": 2.6182106515688757,
-    "fresh_dae_max_vertex_error": 1.7520115919946514e-06
+    "runtime_breathing_handoff": {
+      "max_chest_rotation_degrees": 0.0,
+      "max_source_head_pitch_degrees": 0.0,
+      "authored_breathing_removed": true
+    },
+    "fresh_dae_max_vertex_error": 1.60047073150844e-06
   },
   "shiba_lie_down": {
     "minimum_world_height": -0.001579170930199325,

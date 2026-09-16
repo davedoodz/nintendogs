@@ -70,7 +70,17 @@
       "final_up_axis": "Y_UP",
       "source_sha256": "ca63f32a333cb5f04da83fd5b124156323cc12ec2ff08b94c3461f4f7161f339",
       "loop_endpoint_max_error": 0.0,
-      "loop": true
+      "loop": true,
+      "runtime_breathing_handoff": {
+        "chest_pitch_degrees": 0,
+        "head_pitch_degrees": 0,
+        "retained": [
+          "head_yaw",
+          "ear_flicks",
+          "distal_tail_yaw"
+        ],
+        "sit_idle_and_sleep_breathing": "unchanged"
+      }
     },
     {
       "name": "shiba_sit",

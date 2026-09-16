@@ -54,8 +54,8 @@ LIE = {
 
 
 def idle(t):
-    p = {"chest": (0.45 * math.sin(TAU * t), 0, 0),
-         "head": (0.8 * math.sin(TAU * t), 2 * math.sin(TAU * t), 0),
+    # Breathing is a Mac runtime layer; retain authored yaw and ear flicks.
+    p = {"head": (0, 2 * math.sin(TAU * t), 0),
          "tail2": (0, 3 * math.sin(TAU * t), 0)}
     add(p, "Lear1", pitch=-12 * pulse(t, .36, .48))
     add(p, "Rear1", pitch=-8 * pulse(t, .43, .56))
@@ -259,6 +259,10 @@ def build(render=True):
         if name in {"shiba_walk_loop", "shiba_run_loop"}:
             report.update(root_motion(samples))
         report["loop"] = looping
+        if name == "shiba_idle_loop":
+            report["runtime_breathing_handoff"] = dict(chest_pitch_degrees=0,
+                    head_pitch_degrees=0, retained=["head_yaw", "ear_flicks", "distal_tail_yaw"],
+                    sit_idle_and_sleep_breathing="unchanged")
         reports.append(report)
         channels[name] = samples
         print("CLIP_PASS", name, frames, flush=True)

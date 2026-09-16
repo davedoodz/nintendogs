@@ -1,8 +1,8 @@
 # Clip sets: accepted base tier and second-tier authoring results
 
 The 12 base clips below were accepted by the user before second-tier authoring.
-The storyboard pass below rebuilds walk/run/carry; other accepted pose functions
-remain unchanged in that pass. Later tiers are documented after the base-tier
+The storyboard pass below rebuilds walk/run/carry and removes idle's chest/head
+breathing; other accepted pose functions remain unchanged. Later tiers are documented after the base-tier
 rebuild instructions. Blender-side changes require renewed Mac playback review.
 
 All files are in `mac/Assets/shiba/clips/`. All use 30 fps, one action per DAE,
@@ -12,7 +12,7 @@ for editing; its active action is `shiba_idle_loop`.
 
 | Clip | Frames | Motion |
 | --- | ---: | --- |
-| `shiba_idle_loop` | 120 | Gentle chest/head breathing, staggered ear flick |
+| `shiba_idle_loop` | 120 | Small head yaw, staggered ear flick; breathing left to runtime |
 | `shiba_sit` | 60 | Stand to seated; folded knees/hocks, held ending |
 | `shiba_sit_idle_loop` | 120 | Seated breathing, small head turn and ear flick |
 | `shiba_lie_down` | 75 | Seated to lying; elbows and distal hind legs fold |
@@ -239,6 +239,17 @@ the source open-eye texture remains visible in these authoring previews.
 
 Both commands exit zero with authoring renders enabled. These are Blender-side
 authoring results only; Mac playback acceptance remains pending.
+
+## Idle breathing handoff
+
+The final storyboard pass removes only idle's chest breathing and head-pitch
+breathing. Head yaw, both ear flicks and existing distal-tail yaw are preserved.
+Sit_idle and sleep breathing are unchanged, as are their delivered DAE files.
+`clips_validation.json` records this runtime handoff; the reopened-blend verifier
+checks every idle frame for zero chest rotation and zero source-space head
+pitch (tolerance .0001 degrees). Loop closure and all existing state endpoints
+remain exact. Three idle QA frames were rendered and reviewed after rebuilding.
+No runtime layers, textures or Mac source files were changed.
 
 ## Open issues
 
