@@ -145,6 +145,16 @@ public final class AnimationController {
         "shiba_paws_down",
     ]
 
+    /// Clips that improve a scene when present but are not required for the
+    /// app to run: authored later, on their own schedule, against a rig that
+    /// already ships. Unlike `clipNames`, a missing or unparsable file here
+    /// is silently skipped rather than failing `init` - callers check
+    /// `isClipLoaded(_:)` and fall back to a required clip when absent (see
+    /// `docs/ANIMATION_CONTRACT.md`, "optional" column).
+    public static let optionalClipNames = [
+        "shiba_anticipate_loop",
+    ]
+
     /// Start/end posture for every authored clip, per `blender/CLIPS_RESULT.md`
     /// and `docs/ANIMATION_CONTRACT.md` (not the aliveness plan's pool table,
     /// which mis-listed `shiba_yawn` as sit-safe — the clip's authored entry
@@ -184,6 +194,7 @@ public final class AnimationController {
         "shiba_paws_up_enter": PostureRange(start: .standing, end: .sitting),
         "shiba_paws_up_loop": PostureRange(.sitting),
         "shiba_paws_down": PostureRange(.sitting),
+        "shiba_anticipate_loop": PostureRange(.standing),
     ]
 
     private let root: SCNNode
@@ -234,7 +245,7 @@ public final class AnimationController {
     public init(root: SCNNode) throws {
         self.root = root
 
-        let missingPosture = Self.clipNames.filter { Self.posture[$0] == nil }
+        let missingPosture = (Self.clipNames + Self.optionalClipNames).filter { Self.posture[$0] == nil }
         guard missingPosture.isEmpty else { throw Error.missingPostureMetadata(missingPosture) }
 
         var parsed: [String: LoadedClip] = [:]
@@ -252,18 +263,39 @@ public final class AnimationController {
         }
         guard missingFiles.isEmpty else { throw Error.missingAssets(missingFiles) }
 
-        // Read-only validation pass: every channel in every clip must resolve
-        // against the rig before any player is attached anywhere.
-        for (name, clip) in parsed {
+        // Optional clips: a missing file or a load failure is skipped, not fatal - the whole
+        // point of the list is that the app runs before these are authored.
+        var optionalNames: [String] = []
+        for name in Self.optionalClipNames {
+            guard let url = AssetLocator.shibaClip(named: name),
+                  let clip = try? AnimationLoader.load(url, name: name)
+            else { continue }
+            parsed[name] = clip
+            optionalNames.append(name)
+        }
+
+        // Read-only validation pass: every channel in every clip must resolve against the rig
+        // before any player is attached anywhere. An optional clip that fails this - e.g. an
+        // authored file that targets a joint this rig build doesn't have - is dropped rather
+        // than failing init, same as a missing file.
+        for name in Self.clipNames {
+            guard let clip = parsed[name] else { continue }
             let missingNodes = Set(clip.channels.map(\.nodeName))
                 .filter { root.childNode(withName: $0, recursively: true) == nil }
             guard missingNodes.isEmpty else {
                 throw Error.clipValidationFailed(clip: name, missingNodes: Array(missingNodes).sorted())
             }
         }
+        optionalNames.removeAll { name in
+            guard let clip = parsed[name] else { return true }
+            let missingNodes = Set(clip.channels.map(\.nodeName))
+                .filter { root.childNode(withName: $0, recursively: true) == nil }
+            if !missingNodes.isEmpty { parsed.removeValue(forKey: name) }
+            return !missingNodes.isEmpty
+        }
 
         // All clips validated: now it's safe to mutate the rig.
-        for name in Self.clipNames {
+        for name in Self.clipNames + optionalNames {
             guard let loadedClip = parsed[name] else { continue }
             let repeats = name.hasSuffix("_loop")
             var built: [(node: SCNNode, key: String, player: SCNAnimationPlayer)] = []
@@ -289,6 +321,10 @@ public final class AnimationController {
         // Settle into idle without going through `play`'s no-op guard.
         settleVisual(into: .idle)
     }
+
+    /// Whether an optional clip (`optionalClipNames`) was actually found and loaded. Always
+    /// `true` for a required clip in `clipNames`, since `init` would have thrown otherwise.
+    public func isClipLoaded(_ name: String) -> Bool { clips[name] != nil }
 
     /// Requests an activity. An unmet care request changes the ordinary idle
     /// visual to the authored begging loop without inventing a second logical

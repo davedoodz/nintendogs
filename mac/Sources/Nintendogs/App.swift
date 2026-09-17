@@ -80,9 +80,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var isAiming = false
     private var ballExpiresAt: Date?
     private static let ballLifetime: TimeInterval = 5 * 60
-    /// Excited standing loop played while the ball is held. `shiba_anticipate_loop` is the
-    /// authored clip for this; until it lands, the standing look-around loop stands in.
-    private static let anticipationClip = "shiba_look_around_loop"
+    /// Excited standing loop played while the ball is held: the authored
+    /// `shiba_anticipate_loop` when Blender has shipped it, otherwise the standing
+    /// look-around loop stands in (`AnimationController.optionalClipNames`).
+    private func anticipationClip(_ animations: AnimationController) -> String {
+        animations.isClipLoaded("shiba_anticipate_loop") ? "shiba_anticipate_loop" : "shiba_look_around_loop"
+    }
 
     private func observePresence() {
         let center = NSWorkspace.shared.notificationCenter
@@ -723,8 +726,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             host.setAimTarget(ground)
         }
         host.advanceAim(deltaTime: dt)
-        if animations.currentClip != Self.anticipationClip {
-            animations.triggerReaction(Self.anticipationClip, thenReturnToRest: true)
+        let clip = anticipationClip(animations)
+        if animations.currentClip != clip {
+            animations.triggerReaction(clip, thenReturnToRest: true)
         }
         animations.update(deltaTime: dt)
         host.sceneTime = animations.sceneTime

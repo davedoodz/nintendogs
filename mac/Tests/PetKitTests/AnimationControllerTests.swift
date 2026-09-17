@@ -89,3 +89,14 @@ private func controllerForShiba() throws -> AnimationController {
         #expect(controller.currentClip == "shiba_idle_loop")
     }
 }
+
+/// `shiba_anticipate_loop` is authored but not yet shipped in `Assets/`; `AnimationController`
+/// must still initialize and fall back cleanly rather than throwing `missingAssets` (U6,
+/// `docs/plans/2026-09-17-fetch-feel-aim-bounce-anticipation-plan.md`).
+@Test @MainActor func unshippedOptionalClipDoesNotFailInit() throws {
+    let controller = try controllerForShiba()
+    #expect(!controller.isClipLoaded("shiba_anticipate_loop"))
+    // Every required clip still loaded and is playable.
+    #expect(controller.isClipLoaded("shiba_look_around_loop"))
+    #expect(try controller.playClip(named: "shiba_look_around_loop") > 0)
+}
