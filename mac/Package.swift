@@ -12,5 +12,10 @@ let package = Package(
             path: "Sources/Nintendogs"
         ),
         .testTarget(name: "PetKitTests", dependencies: ["PetKit"], path: "Tests/PetKitTests"),
+        .testTarget(
+            name: "NintendogsTests",
+            dependencies: ["Nintendogs"],
+            path: "Tests/NintendogsTests"
+        ),
     ]
 )

@@ -57,6 +57,7 @@ final class ExpressionAnimator {
     private var tailPhase: Double = 0
     private var breathingPhase: Double = 0
     private var pantPhase: Double = 0
+    private var pleasureMouthPhase: Double = 0
     private var blinkCountdown = Double.random(in: 3...7)
     private var blinkRemaining: TimeInterval = 0
     private var earFlickCountdown = Double.random(in: 4...12)
@@ -66,6 +67,11 @@ final class ExpressionAnimator {
     private var weightShiftTarget: CGFloat = 0
     private var currentEyeState: PetEyeState = .open
     private(set) var needsHighRate = false
+
+    nonisolated static func pleasureMouthOpenAmount(at phase: Double) -> Double {
+        guard phase >= 0.72 else { return 0 }
+        return sin(.pi * (phase - 0.72) / 0.28)
+    }
 
     func configure(
         root: SCNNode,
@@ -99,8 +105,14 @@ final class ExpressionAnimator {
         let dt = min(deltaTime, 0.1)
         tailPhase = (tailPhase + dt * targets.wagFrequencyHz).truncatingRemainder(dividingBy: 1)
         breathingPhase = (breathingPhase + dt * targets.breathingHz).truncatingRemainder(dividingBy: 1)
-        pantPhase = (pantPhase + dt * 3.5).truncatingRemainder(dividingBy: 1)
-
+        let enjoyingPets = targets.enjoyingPets
+        if enjoyingPets {
+            pleasureMouthPhase = (
+                pleasureMouthPhase + dt / 3.2
+            ).truncatingRemainder(dividingBy: 1)
+        } else {
+            pantPhase = (pantPhase + dt * 3.5).truncatingRemainder(dividingBy: 1)
+        }
         let radians = CGFloat.pi / 180
         let wagWeight: Double = tailSuppressed ? 0 : 1
         let tailYaw = wagWeight * (
@@ -113,10 +125,11 @@ final class ExpressionAnimator {
         )
         let breath = targets.breathingDegrees * sin(2 * .pi * breathingPhase)
         let pantSin = sin(2 * .pi * pantPhase)
+        let pleasureOpen = enjoyingPets
+            ? Self.pleasureMouthOpenAmount(at: pleasureMouthPhase)
+            : 0
         let pantAmount: Double
-        if targets.mood == .content && targets.mouthOpenDegrees >= 10 {
-            pantAmount = 1.5 * pantSin
-        } else if targets.tongueOut > 0 {
+        if targets.tongueOut > 0, !enjoyingPets {
             pantAmount = 2 + 2 * pantSin
         } else {
             pantAmount = 0
@@ -178,11 +191,15 @@ final class ExpressionAnimator {
             frame.rightEarPitch,
             baseEar + (!flickLeftEar ? CGFloat(earFlick) * radians : 0)
         )
-        let mouthTarget = mouthSuppressed ? 0 : CGFloat(targets.mouthOpenDegrees + pantAmount) * radians
+        let mouthDegrees = enjoyingPets
+            ? targets.mouthOpenDegrees * pleasureOpen
+            : targets.mouthOpenDegrees + pantAmount
+        let mouthTarget = mouthSuppressed ? 0 : CGFloat(mouthDegrees) * radians
         frame.mouthPitch = smooth(frame.mouthPitch, mouthTarget)
         snapshot.store(frame)
 
-        let tongueOut = mouthSuppressed ? 0 : CGFloat(targets.tongueOut) * (1 + 0.1 * CGFloat(pantSin))
+        let tongueAmount = enjoyingPets ? targets.tongueOut * pleasureOpen : targets.tongueOut
+        let tongueOut = mouthSuppressed ? 0 : CGFloat(tongueAmount) * (1 + 0.1 * CGFloat(pantSin))
         let tongueHidden = tongueOut < 0.01
         if tongueNode.isHidden != tongueHidden {
             tongueNode.isHidden = tongueHidden

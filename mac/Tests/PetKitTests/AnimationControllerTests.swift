@@ -9,7 +9,7 @@ private func controllerForShiba() throws -> AnimationController {
     return try AnimationController(root: model.node)
 }
 
-@Test func authoredClipCatalogIncludesStoryboardTier() {
+@Test @MainActor func authoredClipCatalogIncludesStoryboardTier() {
     #expect(AnimationController.clipNames.count == 34)
     #expect(AnimationController.clipNames.contains("shiba_pet_head_loop"))
     #expect(AnimationController.clipNames.contains("shiba_paws_up_loop"))
@@ -55,6 +55,24 @@ private func controllerForShiba() throws -> AnimationController {
     for _ in 0..<90 { controller.update(deltaTime: 1.0 / 30) }
     #expect(controller.currentClip == "shiba_pet_head_loop")
     #expect(controller.isAnimating)
+}
+
+@Test @MainActor func stoppingSidePettingRoutesUpBeforeAlerting() throws {
+    let controller = try controllerForShiba()
+    try controller.playChoreography(["shiba_pet_settle", "shiba_lie_side_loop"])
+    for _ in 0..<120 { controller.update(deltaTime: 1.0 / 30) }
+    #expect(controller.currentClip == "shiba_lie_side_loop")
+
+    try controller.playChoreography(["shiba_alert"])
+    var visited: Set<String> = []
+    for _ in 0..<180 {
+        controller.update(deltaTime: 1.0 / 30)
+        visited.insert(controller.currentClip)
+    }
+    #expect(visited.contains("shiba_lie_side_up"))
+    #expect(visited.contains("shiba_stand_from_sit"))
+    #expect(controller.currentClip == "shiba_alert")
+    #expect(!controller.isAnimating)
 }
 
 @Test @MainActor func callChoreographyPreservesAuthoredPoseChain() throws {

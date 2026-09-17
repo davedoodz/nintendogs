@@ -22,6 +22,7 @@ public struct PetExpressionTargets: Sendable, Equatable {
     public let breathingHz: Double
     public let breathingDegrees: Double
     public let earsBackDegrees: Double
+    public let enjoyingPets: Bool
 
     public init(
         mood: PetMood,
@@ -35,7 +36,8 @@ public struct PetExpressionTargets: Sendable, Equatable {
         tongueOut: Double,
         breathingHz: Double,
         breathingDegrees: Double,
-        earsBackDegrees: Double
+        earsBackDegrees: Double,
+        enjoyingPets: Bool = false
     ) {
         self.mood = mood
         self.eyes = eyes
@@ -49,6 +51,7 @@ public struct PetExpressionTargets: Sendable, Equatable {
         self.breathingHz = breathingHz
         self.breathingDegrees = breathingDegrees
         self.earsBackDegrees = earsBackDegrees
+        self.enjoyingPets = enjoyingPets
     }
 }
 
@@ -72,7 +75,8 @@ public enum PetExpression {
         tailPitchDegrees: -12, tailTipPitchDegrees: -18,
         wagAmplitudeDegrees: 22, wagFrequencyHz: 3.5, wagBiasDegrees: 6,
         mouthOpenDegrees: 12, tongueOut: 0.2,
-        breathingHz: 0.7, breathingDegrees: 0.65, earsBackDegrees: -18
+        breathingHz: 0.7, breathingDegrees: 0.65, earsBackDegrees: -18,
+        enjoyingPets: true
     )
     private static let running = PetExpressionTargets(
         mood: .excited, eyes: .open,

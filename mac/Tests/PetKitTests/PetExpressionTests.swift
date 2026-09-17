@@ -12,6 +12,7 @@ import Testing
     #expect(targets.eyes == .closed)
     #expect(targets.mouthOpenDegrees == 12)
     #expect(targets.tongueOut == 0.2)
+    #expect(targets.enjoyingPets)
     #expect(targets.wagAmplitudeDegrees == 22)
     #expect(targets.wagFrequencyHz == 3.5)
     #expect(targets.wagBiasDegrees > 0)

@@ -49,20 +49,30 @@ final class SceneHost: SCNView {
     /// body-adjacent limit — same order as the accepted `tail2` ±20° yaw).
     private static let maxGazeYaw: CGFloat = 20 * .pi / 180
     private static let maxGazePitch: CGFloat = 10 * .pi / 180
-    /// "Nearby" hover/gaze zone (`docs/ALIVENESS_PLAN.md` Phase 3: "cursor is
-    /// within ~1.5 panel-widths") — expanding each side by a quarter width
-    /// yields a total span of 1.5x the view.
+    /// The hand affordance is intentionally tighter than whole-pet attention:
+    /// it follows the animated head joint and accepts ears/snout around it.
+    private static let headPetRadius = dogHeight * 0.34
     private static let nearbyZoneExpansion: CGFloat = 0.25
 
     private let petAnchor = SCNNode()
     private let blobShadow = SCNNode()
-    private var petClickPoint: CGPoint?
+    private var pressedOnPet = false
+    private var pettingGesture = PettingGesture()
+    private var lastCursorSampleAt: TimeInterval = 0
+    private var cursorTrackingArea: NSTrackingArea?
+    private(set) var cursorOverPetHead = false
+    var pettingCursorEnabled = true {
+        didSet {
+            if !pettingCursorEnabled {
+                dispatchPetting(pettingGesture.end())
+                setPettingCursor(overHead: false)
+            }
+        }
+    }
+    var onPetting: ((PettingGesture.Event) -> Void)?
     var onCall: (() -> Void)?
-    var onStroke: (() -> Void)?
     var onPlay: (() -> Void)?
     var onBallPicked: (() -> Void)?
-    private var stroked = false
-    private var lastStrokeTime: TimeInterval = 0
     private let bowl = SCNNode()
     private let bowlContents = SCNNode()
     private var displayedActivity: PetActivity?
@@ -146,6 +156,24 @@ final class SceneHost: SCNView {
     required init?(coder: NSCoder) { fatalError("unsupported") }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.acceptsMouseMovedEvents = true
+    }
+
+    override func updateTrackingAreas() {
+        if let cursorTrackingArea { removeTrackingArea(cursorTrackingArea) }
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .mouseEnteredAndExited, .cursorUpdate, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        cursorTrackingArea = area
+        super.updateTrackingAreas()
+    }
 
     private func configure() {
         let scene = SCNScene()
@@ -530,7 +558,7 @@ final class SceneHost: SCNView {
             stepWander(deltaTime: deltaTime)
         }
         let viewPoint = cursorViewPoint(override: cursorOverride)
-        updateCursorState(viewPoint: viewPoint)
+        updateCursorState(viewPoint: viewPoint, updatesSystemCursor: cursorOverride == nil)
         updateGaze(deltaTime: deltaTime, activity: activity, viewPoint: viewPoint)
         blobShadow.position = SCNVector3(petAnchor.position.x, blobShadow.position.y, petAnchor.position.z)
     }
@@ -1010,75 +1038,134 @@ final class SceneHost: SCNView {
         return convert(windowPoint, from: nil)
     }
 
-    private func updateCursorState(viewPoint: CGPoint?) {
-        guard let viewPoint else {
+    private func updateCursorState(viewPoint: CGPoint?, updatesSystemCursor: Bool) {
+        var overHead = false
+        if let viewPoint {
+            let nearbyZone = bounds.insetBy(
+                dx: -bounds.width * Self.nearbyZoneExpansion,
+                dy: -bounds.height * Self.nearbyZoneExpansion
+            )
+            cursorNearby = nearbyZone.contains(viewPoint)
+            if bounds.contains(viewPoint) {
+                let hit = firstHit(at: viewPoint)
+                let onPet = hit.map { isPetNode($0.node) } ?? false
+                cursorAttention = onPet
+                if onPet, updatesSystemCursor, pettingCursorEnabled, let hit {
+                    overHead = isPetHeadHit(hit, at: viewPoint)
+                }
+            } else {
+                cursorAttention = false
+            }
+        } else {
             cursorNearby = false
             cursorAttention = false
-            return
         }
-        let nearbyZone = bounds.insetBy(
-            dx: -bounds.width * Self.nearbyZoneExpansion,
-            dy: -bounds.height * Self.nearbyZoneExpansion
-        )
-        cursorNearby = nearbyZone.contains(viewPoint)
-        guard bounds.contains(viewPoint) else {
-            cursorAttention = false
-            return
-        }
-        let hit = hitTest(viewPoint, options: [SCNHitTestOption.firstFoundOnly: true])
-        cursorAttention = hit.first.map { isPetNode($0.node) } ?? false
+        if updatesSystemCursor { setPettingCursor(overHead: overHead) }
     }
 
-    // MARK: - Mouse: click (call), drag (stroke), double-click (play)
+    override func mouseMoved(with event: NSEvent) {
+        guard event.timestamp - lastCursorSampleAt >= 1.0 / 30 else { return }
+        lastCursorSampleAt = event.timestamp
+        updatePettingCursor(for: event)
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        updatePettingCursor(for: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        setPettingCursor(overHead: false)
+    }
+
+    private func updatePettingCursor(for event: NSEvent) {
+        guard pettingCursorEnabled else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        let overHead = firstHit(at: point).map { isPetHeadHit($0, at: point) } ?? false
+        setPettingCursor(overHead: overHead)
+    }
+
+    private func setPettingCursor(overHead: Bool) {
+        let shouldShowHand = pettingCursorEnabled && overHead
+        guard cursorOverPetHead != shouldShowHand else { return }
+        cursorOverPetHead = shouldShowHand
+        (shouldShowHand ? NSCursor.openHand : NSCursor.arrow).set()
+    }
+
+    private func firstHit(at point: CGPoint) -> SCNHitTestResult? {
+        hitTest(point, options: [SCNHitTestOption.firstFoundOnly: true]).first
+    }
+
+    private func isPetHeadHit(_ hit: SCNHitTestResult, at viewPoint: CGPoint) -> Bool {
+        guard isPetNode(hit.node), let headNode else { return false }
+        let head = headNode.presentation.worldPosition
+        let center = projectPoint(head)
+        let edge = projectPoint(
+            SCNVector3(head.x + Self.headPetRadius, head.y, head.z)
+        )
+        let radius = max(12, CGFloat(abs(edge.x - center.x)))
+        return hypot(viewPoint.x - CGFloat(center.x), viewPoint.y - CGFloat(center.y)) <= radius
+    }
+
+    // MARK: - Mouse: head drag (pet), click (call), double-click (play)
 
     override func mouseDown(with event: NSEvent) {
-        stroked = false
+        dispatchPetting(pettingGesture.end())
+        pressedOnPet = false
         let point = convert(event.locationInWindow, from: nil)
-        let hit = hitTest(point, options: [SCNHitTestOption.firstFoundOnly: true])
-        if let node = hit.first?.node, isBallNode(node), !ballAttached {
+        let hit = firstHit(at: point)
+        if let node = hit?.node, isBallNode(node), !ballAttached {
             removeBall()
             onBallPicked?()
             return
         }
-        if let node = hit.first?.node, isPetNode(node) {
-            petClickPoint = point
+        if let hit, isPetNode(hit.node) {
+            pressedOnPet = true
+            pettingGesture.begin(at: point, overHead: isPetHeadHit(hit, at: point))
             return
         }
-        petClickPoint = nil
         super.mouseDown(with: event)
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let start = petClickPoint else {
+        guard pressedOnPet else {
             super.mouseDragged(with: event)
             return
         }
         let point = convert(event.locationInWindow, from: nil)
-        guard hypot(point.x - start.x, point.y - start.y) >= 8 else { return }
-        stroked = true
-        let hit = hitTest(point, options: [.firstFoundOnly: true])
-        guard let node = hit.first?.node, isPetNode(node) else { return }
-        let now = ProcessInfo.processInfo.systemUptime
-        if now - lastStrokeTime >= 1 {
-            lastStrokeTime = now
-            onStroke?()
-        }
+        let overHead = firstHit(at: point).map { isPetHeadHit($0, at: point) } ?? false
+        setPettingCursor(overHead: overHead)
+        dispatchPetting(
+            pettingGesture.drag(
+                to: point,
+                overHead: overHead,
+                at: event.timestamp
+            )
+        )
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { petClickPoint = nil }
-        guard let start = petClickPoint else {
+        let beganOnHead = pettingGesture.beganOnHead
+        let moved = pettingGesture.moved
+        let wasActive = pettingGesture.isActive
+        dispatchPetting(pettingGesture.end())
+        defer { pressedOnPet = false }
+        if wasActive { return }
+        guard pressedOnPet else {
             super.mouseUp(with: event)
             return
         }
-        let end = convert(event.locationInWindow, from: nil)
-        let distance = hypot(end.x - start.x, end.y - start.y)
-        guard !stroked, distance < 8 else { return }
+        // A head press is reserved for petting; without rubbing it has no action.
+        guard !beganOnHead, !moved else { return }
         if event.clickCount >= 2 {
             onPlay?()
         } else {
             onCall?()
         }
+    }
+
+    private func dispatchPetting(_ event: PettingGesture.Event?) {
+        guard let event else { return }
+        onPetting?(event)
     }
 
     private func isPetNode(_ node: SCNNode) -> Bool {

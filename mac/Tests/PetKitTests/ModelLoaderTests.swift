@@ -13,6 +13,8 @@ import SceneKit
     #expect(model.eyeTextures.keys.sorted(by: { $0.rawValue < $1.rawValue })
         == PetEyeState.allCases.sorted(by: { $0.rawValue < $1.rawValue }))
     #expect(model.tongueTexture != nil)
+    #expect(model.node.childNode(withName: "head", recursively: true) != nil,
+            "head petting requires the authored head joint")
     let (minB, maxB) = model.node.boundingBox
     #expect(abs(Double(maxB.y - minB.y) - 1.0) < 0.01)
     #expect(abs(Double(minB.y)) < 0.01, "feet on the floor")
