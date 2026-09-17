@@ -109,6 +109,14 @@ Locomotion is in-place; the app moves `skl_root`'s parent. Non-loop clips end on
 
 The second tier (`stand_from_sit` through `fetch_carry_loop`) uses a stricter **under 7°** limit on `tail1`, `neck`, `Lleg1`/`Rleg1`, and `Larm1`/`Rarm1`. Its non-loop entry and final poses are checked against the accepted state clips' first frames. Rebuild with `blender/author_clips.py -- --tier2` and verify with `blender/verify_clips.py -- --tier2` in Blender 4.2 LTS. See `blender/tier2_validation.json` and `blender/tier2_roundtrip_validation.json`; these authoring checks do not replace Mac playback review.
 
+## Optional clips (not required for `AnimationController.init` to succeed)
+
+| File | Loop | Notes |
+| --- | --- | --- |
+| `shiba_anticipate_loop.dae` | yes | **requested, not yet authored.** Standing, weight forward, head up and slightly tilted as if watching a held ball, fast tail wag, small weight shift; 1.5-2.5s, seamless, starts/ends in `shiba_idle_loop`'s standing pose, no root translation, all 28 joints keyed. Played while the ball is held during aim (R2-R4, `docs/plans/2026-09-17-fetch-feel-aim-bounce-anticipation-plan.md`). |
+
+`AnimationController.optionalClipNames` loads these best-effort: a missing or unparsable file is skipped rather than failing `init`, since the app must run before Windows authors them. `isClipLoaded(_:)` reports whether one landed; the Mac side picks a required-clip fallback when it hasn't (`shiba_look_around_loop` for `shiba_anticipate_loop`, in `App.anticipationClip(_:)`). Once exported, drop the file at `mac/Assets/shiba/clips/shiba_anticipate_loop.dae` — no Mac-side code change needed, the fallback stops firing automatically.
+
 ## Export settings (Blender 4.2 Collada)
 
 - Selection only: armature + mesh
