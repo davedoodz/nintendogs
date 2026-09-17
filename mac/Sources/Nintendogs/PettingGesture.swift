@@ -15,7 +15,6 @@ struct PettingGesture {
     static let strokeInterval: TimeInterval = 0.18
 
     private(set) var beganOnHead = false
-    private(set) var moved = false
     private(set) var isActive = false
     private var trackingHead = false
     private var startPoint: CGPoint?
@@ -36,7 +35,6 @@ struct PettingGesture {
         let segment = lastPoint.map { hypot(point.x - $0.x, point.y - $0.y) } ?? 0
         lastPoint = point
         let total = hypot(point.x - startPoint.x, point.y - startPoint.y)
-        if total >= Self.startDistance { moved = true }
         if !trackingHead {
             guard beganOnHead, overHead else { return nil }
             trackingHead = true
@@ -78,7 +76,6 @@ struct PettingGesture {
 
     private mutating func reset() {
         beganOnHead = false
-        moved = false
         trackingHead = false
         isActive = false
         startPoint = nil

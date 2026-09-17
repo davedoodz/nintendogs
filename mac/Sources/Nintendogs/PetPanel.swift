@@ -19,7 +19,7 @@ final class PetPanel: NSPanel {
         hasShadow = false
         level = .floating
         hidesOnDeactivate = false
-        isMovableByWindowBackground = true
+        isMovableByWindowBackground = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
         isReleasedWhenClosed = false
         minSize = NSSize(width: 360, height: 240)

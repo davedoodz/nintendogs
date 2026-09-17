@@ -141,7 +141,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             )
             animations = try AnimationController(root: loaded.node)
             ambient = AmbientDirector(controller: animations!)
-            panel.sceneHost.onCall = { [weak self] in self?.interact(.call) }
             panel.sceneHost.onPetting = { [weak self] event in
                 switch event {
                 case .began: self?.beginHeldPetting()
@@ -149,7 +148,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 case .ended: self?.endHeldPetting()
                 }
             }
-            panel.sceneHost.onPlay = { [weak self] in self?.interact(.play) }
             panel.sceneHost.onBallPicked = { [weak self] in
                 self?.ballExpiresAt = nil
                 self?.hold(.ball)

@@ -19,13 +19,13 @@ final class GlobalHotKey {
     /// just to name one key code, and so the registration and the label the
     /// user reads can never drift apart.
     ///
-    /// ⌥⌘W rather than a bare `W`: a modifier-free registration is possible
+    /// ⌥W rather than a bare `W`: a modifier-free registration is possible
     /// and deliberately unused, because it would take that key away from every
     /// other app.
-    static let whistleDisplayName = "⌥⌘W"
+    static let whistleDisplayName = "⌥W"
 
     static func whistle(action: @MainActor @escaping () -> Void) -> GlobalHotKey? {
-        GlobalHotKey(keyCode: kVK_ANSI_W, modifiers: cmdKey | optionKey, action: action)
+        GlobalHotKey(keyCode: kVK_ANSI_W, modifiers: optionKey, action: action)
     }
 
     /// Carbon passes the callback only a numeric id, never a context pointer,

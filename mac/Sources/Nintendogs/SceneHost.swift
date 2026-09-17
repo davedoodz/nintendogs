@@ -56,7 +56,6 @@ final class SceneHost: SCNView {
 
     private let petAnchor = SCNNode()
     private let blobShadow = SCNNode()
-    private var pressedOnPet = false
     private var pettingGesture = PettingGesture()
     private var lastCursorSampleAt: TimeInterval = 0
     private var cursorTrackingArea: NSTrackingArea?
@@ -70,8 +69,6 @@ final class SceneHost: SCNView {
         }
     }
     var onPetting: ((PettingGesture.Event) -> Void)?
-    var onCall: (() -> Void)?
-    var onPlay: (() -> Void)?
     var onBallPicked: (() -> Void)?
     private let bowl = SCNNode()
     private let bowlContents = SCNNode()
@@ -1103,14 +1100,25 @@ final class SceneHost: SCNView {
             SCNVector3(head.x + Self.headPetRadius, head.y, head.z)
         )
         let radius = max(12, CGFloat(abs(edge.x - center.x)))
-        return hypot(viewPoint.x - CGFloat(center.x), viewPoint.y - CGFloat(center.y)) <= radius
+        return Self.isWithinPettingRange(
+            viewPoint,
+            center: CGPoint(x: CGFloat(center.x), y: CGFloat(center.y)),
+            radius: radius
+        )
     }
 
-    // MARK: - Mouse: head drag (pet), click (call), double-click (play)
+    nonisolated static func isWithinPettingRange(
+        _ point: CGPoint,
+        center: CGPoint,
+        radius: CGFloat
+    ) -> Bool {
+        hypot(point.x - center.x, point.y - center.y) <= radius
+    }
+
+    // MARK: - Mouse: head drag (pet), ball pickup
 
     override func mouseDown(with event: NSEvent) {
         dispatchPetting(pettingGesture.end())
-        pressedOnPet = false
         let point = convert(event.locationInWindow, from: nil)
         let hit = firstHit(at: point)
         if let node = hit?.node, isBallNode(node), !ballAttached {
@@ -1119,15 +1127,16 @@ final class SceneHost: SCNView {
             return
         }
         if let hit, isPetNode(hit.node) {
-            pressedOnPet = true
-            pettingGesture.begin(at: point, overHead: isPetHeadHit(hit, at: point))
+            if isPetHeadHit(hit, at: point) {
+                pettingGesture.begin(at: point, overHead: true)
+            }
             return
         }
         super.mouseDown(with: event)
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard pressedOnPet else {
+        guard pettingGesture.beganOnHead else {
             super.mouseDragged(with: event)
             return
         }
@@ -1144,22 +1153,10 @@ final class SceneHost: SCNView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        let beganOnHead = pettingGesture.beganOnHead
-        let moved = pettingGesture.moved
-        let wasActive = pettingGesture.isActive
+        let handledPetPress = pettingGesture.beganOnHead
         dispatchPetting(pettingGesture.end())
-        defer { pressedOnPet = false }
-        if wasActive { return }
-        guard pressedOnPet else {
+        if !handledPetPress {
             super.mouseUp(with: event)
-            return
-        }
-        // A head press is reserved for petting; without rubbing it has no action.
-        guard !beganOnHead, !moved else { return }
-        if event.clickCount >= 2 {
-            onPlay?()
-        } else {
-            onCall?()
         }
     }
 

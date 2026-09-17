@@ -20,7 +20,7 @@ struct GlobalHotKeyTests {
 
         key?.invalidate()
 
-        // A dropped-but-still-registered key would leave ⌥⌘W permanently dead
+        // A dropped-but-still-registered key would leave ⌥W permanently dead
         // for every app until reboot, so releasing must actually free it.
         let reclaimed = GlobalHotKey.whistle {}
         #expect(reclaimed != nil)
