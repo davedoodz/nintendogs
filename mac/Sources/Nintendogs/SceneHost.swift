@@ -122,6 +122,9 @@ final class SceneHost: SCNView {
     /// code should have no reason to read it (`isWandering`/`isRunning`
     /// already expose what callers need).
     var pendingWanderTargetForTesting: SCNVector3? { wanderTarget }
+    /// Test-only window onto the live root position, for asserting the
+    /// per-frame depth backstop actually pulls an out-of-band Z back in.
+    var debugPetAnchorPositionForTesting: SCNVector3 { petAnchor.position }
     private var gaitSpeeds: (walk: CGFloat, run: CGFloat)?
     private var isCallApproaching = false
 
@@ -690,17 +693,25 @@ final class SceneHost: SCNView {
         return lo <= hi ? lo...hi : 0...0
     }
 
-    /// Defensive resize handling: pulls the root back inside the current
-    /// walkable X range if a shrink left it outside. Skipped while
-    /// `showCare`'s "approach" action owns root position (call/eat/drink),
-    /// so it never fights that motion.
+    /// Defensive per-frame backstop: pulls the root back inside the current
+    /// walkable X range if a resize left it outside, and back inside
+    /// `wanderZRange` if any code path (present or future) ever set a depth
+    /// past the documented safe band — the same class of bug that once let
+    /// `startCallApproach()`'s and the bowl's hardcoded depths crop the dog
+    /// against the panel edges. Skipped while `showCare`'s "approach" action
+    /// owns root position (call/eat/drink), so it never fights that motion;
+    /// those paths already target safe depths, so nothing here needs to.
     private func clampToWalkableBounds() {
         guard petAnchor.action(forKey: "approach") == nil else { return }
+        let clampedZ = min(max(petAnchor.position.z, Self.wanderZRange.lowerBound), Self.wanderZRange.upperBound)
+        if clampedZ != petAnchor.position.z {
+            petAnchor.position.z = clampedZ
+        }
         let range = walkableXRange(atWorldZ: petAnchor.position.z)
         guard range.lowerBound <= range.upperBound else { return }
-        let clamped = min(max(petAnchor.position.x, range.lowerBound), range.upperBound)
-        if clamped != petAnchor.position.x {
-            petAnchor.position.x = clamped
+        let clampedX = min(max(petAnchor.position.x, range.lowerBound), range.upperBound)
+        if clampedX != petAnchor.position.x {
+            petAnchor.position.x = clampedX
         }
     }
 
