@@ -33,11 +33,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         case settling
         case side
         case belly
-        case rising
+        case noticing
     }
     private(set) var panel: PetPanel?
     private var notchTray: NotchTrayPanel?
     private let heldItems = HeldItemSession()
+    private var whistleKey: GlobalHotKey?
     @Published var status = "Loading…"
     @Published var needs = PetNeeds()
     @Published var failure: String?
@@ -62,9 +63,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var callPhase: CallPhase?
     private var callPawsLoopTime: TimeInterval = 0
     private var pettingPhase: PettingPhase?
+    private var pettingIsHeld = false
+    private var behaviorBeforePetting: PetBehavior?
     private var pettingStartedAt = -Double.infinity
     private var lastPetStrokeAt = -Double.infinity
-    private var recentPetStrokes: [TimeInterval] = []
     private var fetchSequence: FetchSequence?
     private var fetchPhase: FetchSequence.Phase?
     /// A thrown ball is still moving; the flight owns the ball's transform until it rests.
@@ -137,7 +139,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             animations = try AnimationController(root: loaded.node)
             ambient = AmbientDirector(controller: animations!)
             panel.sceneHost.onCall = { [weak self] in self?.interact(.call) }
-            panel.sceneHost.onStroke = { [weak self] in self?.interact(.pet) }
+            panel.sceneHost.onPetting = { [weak self] event in
+                switch event {
+                case .began: self?.beginHeldPetting()
+                case .stroke: self?.continueHeldPetting()
+                case .ended: self?.endHeldPetting()
+                }
+            }
             panel.sceneHost.onPlay = { [weak self] in self?.interact(.play) }
             panel.sceneHost.onBallPicked = { [weak self] in
                 self?.ballExpiresAt = nil
@@ -156,6 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             heldItems.onCancel = { [weak self] in self?.cancelHold() }
             observePresence()
             refresh()
+            registerWhistleKey()
             if (7..<11).contains(localHour) { greet() }
             panel.orderFrontRegardless()
             lastTick = now
@@ -204,8 +213,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
 
+    private func registerWhistleKey() {
+        whistleKey = GlobalHotKey.whistle { [weak self] in self?.whistle() }
+        if whistleKey == nil {
+            failure = "Whistle shortcut \(GlobalHotKey.whistleDisplayName) is already taken by another app."
+        }
+    }
+
+    /// The whistle: calls the dog from anywhere, including while another app is
+    /// focused and while the dog's back is turned. `.call` already plays the
+    /// stun/curious orientation and then runs the dog toward the viewer, so the
+    /// key only has to make sure there is a visible dog to call: the
+    /// choreography advances from the presence loop, which idles while the
+    /// panel is hidden.
+    func whistle() {
+        guard behavior != nil, let panel else { return }
+        if !panel.isVisible { panel.orderFrontRegardless() }
+        interact(.call)
+    }
+
     func interact(_ activity: PetActivity) {
         guard behavior != nil else { return }
+        if activity == .pet {
+            applyPetStroke()
+            save()
+            return
+        }
         if fetchSequence != nil { cancelFetch() }
         previewing = false
         interactionTime = presenceTime
@@ -216,8 +249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         switch activity {
         case .pet:
-            cancelCallChoreography()
-            beginPetStroke()
+            break // Handled above so repeated strokes do not persist every pointer sample.
         case .call:
             cancelPettingChoreography()
             beginCallChoreography()
@@ -257,6 +289,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 status = fetchFlightActive ? "Throwing" : "Fetching"
             } else if callPhase != nil {
                 status = "Coming"
+            } else if pettingPhase == .noticing {
+                status = "Perking up"
             } else if pettingPhase != nil {
                 status = "Enjoying pets"
             } else if let request = behavior.state.careRequest {
@@ -296,12 +330,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 expressionActivity = .idle
             }
         } else if let pettingPhase {
-            expressionActivity = pettingPhase == .rising ? .idle : .pet
+            expressionActivity = pettingPhase == .noticing ? .call : .pet
         } else {
             expressionActivity = fetchSequence == nil ? brain.state.activity : .fetch
         }
         let running = animations.currentClip == AnimationController.Locomotion.run.rawValue
-        let expressionSettling = pettingPhase == .rising || callPhase == .pawsDown
+        let expressionSettling = callPhase == .pawsDown
         let engaged = !expressionSettling && (
             host.cursorAttention
                 || presenceTime - interactionTime < 8
@@ -387,25 +421,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         host.sceneTime = animations.sceneTime
         host.setAnimationActive(rendererShouldRun(host: host, animations: animations))
     }
+    private func beginHeldPetting() {
+        pettingIsHeld = true
+        interact(.pet)
+    }
+
+    private func continueHeldPetting() {
+        guard pettingIsHeld else { return }
+        applyPetStroke()
+    }
+
+    private func applyPetStroke() {
+        guard behavior != nil else { return }
+        if fetchSequence != nil { cancelFetch() }
+        if pettingPhase == nil {
+            behaviorBeforePetting = behavior
+        }
+        previewing = false
+        interactionTime = presenceTime
+        wasHovering = false
+        ambient?.setAttention(false)
+        panel?.sceneHost.stopWander()
+        behavior?.interact(.pet, at: Date())
+        cancelCallChoreography()
+        beginPetStroke()
+        refresh()
+    }
+
+    private func endHeldPetting() {
+        guard pettingIsHeld else { return }
+        pettingIsHeld = false
+        beginPetNotice()
+        refresh()
+        save()
+    }
 
     private func beginPetStroke() {
-        recentPetStrokes.removeAll { $0 < presenceTime - 4 }
-        recentPetStrokes.append(presenceTime)
         lastPetStrokeAt = presenceTime
 
         switch pettingPhase {
-        case nil, .rising:
+        case nil, .noticing:
             guard playChoreography(["shiba_pet_react", "shiba_pet_head_loop"]) else { return }
             pettingPhase = .head
             pettingStartedAt = presenceTime
-        case .side, .belly:
+        case .side:
             guard playChoreography(["shiba_belly_loop"]) else { return }
             pettingPhase = .belly
-        case .head:
-            if recentPetStrokes.count >= 3 || presenceTime - pettingStartedAt >= 6 {
-                beginPetSettle()
-            }
-        case .settling:
+        case .belly, .head, .settling:
             break
         }
     }
@@ -415,39 +477,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         pettingPhase = .settling
     }
 
+    private func beginPetNotice() {
+        guard pettingPhase != nil,
+              playChoreography(["shiba_alert"]) else { return }
+        pettingPhase = .noticing
+    }
+
     private func advancePettingChoreography() {
         guard let phase = pettingPhase, let animations else { return }
+        if phase != .noticing,
+           !pettingIsHeld,
+           presenceTime - lastPetStrokeAt >= 5 {
+            beginPetNotice()
+            return
+        }
         switch phase {
         case .head:
-            if presenceTime - pettingStartedAt >= 6, presenceTime - lastPetStrokeAt < 5 {
+            if pettingIsHeld, presenceTime - pettingStartedAt >= 6 {
                 beginPetSettle()
-            } else if presenceTime - lastPetStrokeAt >= 5 {
-                cancelPettingChoreography()
-                resumeBehaviorAnimation()
             }
         case .settling:
             if animations.currentClip == "shiba_lie_side_loop" {
                 pettingPhase = .side
             }
-            if presenceTime - lastPetStrokeAt >= 5 {
-                beginPetRise()
-            }
         case .side, .belly:
-            if presenceTime - lastPetStrokeAt >= 5 {
-                beginPetRise()
-            }
-        case .rising:
-            if animations.currentClip == "shiba_sit_idle_loop" {
-                cancelPettingChoreography()
-                resumeBehaviorAnimation()
+            break
+        case .noticing:
+            if !animations.isAnimating {
+                finishPetNotice()
             }
         }
     }
 
-    private func beginPetRise() {
-        guard pettingPhase != .rising,
-              playChoreography(["shiba_lie_side_up", "shiba_sit_idle_loop"]) else { return }
-        pettingPhase = .rising
+    private func finishPetNotice() {
+        let previous = behaviorBeforePetting
+        let current = behavior
+        cancelPettingChoreography()
+        if let previous, let current {
+            behavior = Self.restoreBehavior(beforePetting: previous, afterPetting: current)
+        }
+        resumeBehaviorAnimation()
+        refresh()
+    }
+
+    nonisolated static func restoreBehavior(
+        beforePetting previous: PetBehavior,
+        afterPetting current: PetBehavior
+    ) -> PetBehavior {
+        var restored = previous
+        restored.state.needs = current.state.needs
+        restored.state.lastUpdated = current.state.lastUpdated
+        restored.state.lastInteractionAt = current.state.lastInteractionAt
+        return restored
     }
 
     private func beginCallChoreography() {
@@ -552,7 +633,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     private func cancelPettingChoreography() {
         pettingPhase = nil
-        recentPetStrokes.removeAll(keepingCapacity: true)
+        pettingIsHeld = false
+        behaviorBeforePetting = nil
         pettingStartedAt = -Double.infinity
         lastPetStrokeAt = -Double.infinity
     }
@@ -594,13 +676,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         if let screen = NotchTrayPanel.preferredScreen() {
             heldItems.cancelRect = NotchTrayPanel.notchRect(on: screen)
         }
-        heldItems.begin(item)
+        beginHolding(item)
         // Only the ball is aimed; a bowl is placed, so the dog has nothing to track.
         if item == .ball { beginAiming() }
     }
 
     func cancelHold() {
-        heldItems.end()
+        endHolding()
         if isAiming {
             endAiming(resumeIdle: true)
             panel?.leaveArena()
@@ -661,15 +743,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 panel.leaveArena()
                 return
             }
-            heldItems.end()
+            endHolding()
             endAiming(resumeIdle: false)
             beginFetch(to: ground)
         case .foodBowl, .waterBowl:
-            heldItems.end()
+            endHolding()
             ballExpiresAt = nil
             panel.sceneHost.removeBall()
             interact(item == .foodBowl ? .eat : .drink)
         }
+    }
+
+    private func beginHolding(_ item: ItemSprite) {
+        heldItems.begin(item)
+        panel?.sceneHost.pettingCursorEnabled = false
+    }
+
+    private func endHolding() {
+        heldItems.end()
+        panel?.sceneHost.pettingCursorEnabled = true
     }
 
     /// Throws the ball and starts the chase on the same tick (R8): the dog runs at the rest
@@ -797,6 +889,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     func applicationWillTerminate(_ notification: Notification) {
         loop?.cancel()
+        whistleKey?.invalidate()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         behavior?.tick(at: Date())
         save()

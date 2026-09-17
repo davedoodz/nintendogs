@@ -13,12 +13,13 @@ struct StatusMenu: View {
         Text("Energy: \(Int(delegate.needs.energy))% · Fun: \(Int(delegate.needs.fun))%")
         Text("Cleanliness: \(Int(delegate.needs.cleanliness))% · Affection: \(Int(delegate.needs.affection))%")
         Text("Hover to say hello · Stroke to pet · Double-click to play")
+        Text("Whistle from any app: \(GlobalHotKey.whistleDisplayName)")
         Divider()
         Button("Give food") { delegate.interact(.eat) }
         Button("Give water") { delegate.interact(.drink) }
         Button("Pet Shiba") { delegate.interact(.pet) }
         Button("Play together") { delegate.interact(.play) }
-        Button("Call / wake") { delegate.interact(.call) }
+        Button("Whistle / wake (\(GlobalHotKey.whistleDisplayName))") { delegate.whistle() }
         Button("Rest") { delegate.interact(.sleep) }
         Button("Resume autonomous behavior") { delegate.interact(.idle) }
         Menu("Personality") {

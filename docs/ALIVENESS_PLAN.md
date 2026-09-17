@@ -4,7 +4,7 @@
 
 The dog should look alive without selecting animations. Care remains optional interaction, not the trigger required to make it move.
 
-**Built:** autonomous fidgets, posture changes, bounded wandering, cursor gaze and hover reactions, direct play gestures, fetch, daytime naps, return greetings, morning/evening rhythms, mood-driven expression layers, and the 34-clip storyboard set.
+**Built:** autonomous fidgets, posture changes, bounded wandering, cursor gaze and hover reactions, direct play gestures, fetch, daytime naps, return greetings, morning/evening rhythms, mood-driven expression layers, the 34-clip storyboard set, and a system-wide whistle key.
 
 **Needs David's eye:** pace, character, and how enjoyable the interactions feel. Headless verification does not constitute visual acceptance or shipping.
 
@@ -53,6 +53,8 @@ The eye material has coat-specific open/closed/squint/wide 32×32 textures. Pett
 
 The storyboard's ten third-tier clips are wired into explicit interaction choreography. Petting hands `shiba_pet_react` into `shiba_pet_head_loop`; three strokes within four seconds or sustained petting settles through `shiba_pet_settle` into side rest, another stroke selects `shiba_belly_loop`, and five seconds without petting rises through `shiba_lie_side_up`. Call plays stun → curious orientation → a real root-motion run toward the near position → paws-up entry/loop → paws-down into sitting. Choreography uses the same posture metadata and preloaded players as ordinary activity routing.
 
+That call choreography is also bound to a whistle key, `⌥⌘W`, so the dog can be called while its back is turned and while another app is focused. The panel does not activate and receives no `keyDown`, and the app has no main menu whose key equivalents could fire in the background, so the key is a Carbon `RegisterEventHotKey` registration rather than an `NSEvent` global monitor: the monitor route would require the user to grant Input Monitoring, and this route requires no permission. A modifier-free key was deliberately not used, because it would take that key away from every other app. Whistling at a hidden dog shows the panel first, since the choreography advances from the presence loop, which idles while the panel is hidden. If another app already owns the combination, registration fails and the menu reports it instead of leaving a key that silently does nothing.
+
 ## Presence rhythm
 
 After twenty minutes alone during the day, the dog settles into sitting; after twenty-five, it naps. A forty-five-minute cycle lets a fully rested unattended dog get up again rather than sleep forever. Critical hunger/thirst prevents this nap. Calling or caring wakes it and provides an awake grace period.
@@ -82,6 +84,8 @@ The first directional gaze snapshots did not exercise SceneKit's frame-to-frame 
 The final expression proof loads the bundled coat-B model and production textures, installs all eight additive constraints, and renders 540 Metal frames across petting, ball carry, calm blinking, and sleep. It verifies all four eye textures load; a randomized open-eye blink closes and reopens; the closed-eye image reaches the eye material; the tongue shows for petting and hides for sleep and ball carry; carried-ball jaw pant is suppressed; call root travel reaches its target; and the petting tail delta stays anatomically bounded at **15.05°**. A 10-second, 30 Hz high-expression render used **0.37 CPU-seconds over 11.85 wall-seconds** (about **3.1% CPU**) with a **69.8 MiB** maximum resident set.
 
 A second bundled Metal probe initializes the production controller with all **34** clips, renders each clip without a load/channel failure, and exercises the runtime handoffs into `shiba_pet_head_loop`, `shiba_call_curious`, `shiba_paws_up_loop`, and `shiba_sit_idle_loop`. Evidence: `mac/build/expression-proof/verification.json` and `mac/build/clip-integration-proof/verification.json`.
+
+The whistle proof asserts the registration is live at the OS rather than a silent no-op: a second claim on `⌥⌘W` is refused while the key is held, and succeeds again after `invalidate()`, which is what proves the key is released instead of left dead for every app. It then starts the dog back-turned and far away and drives the call beats, confirming the head turns toward the viewer during orientation and that the dog runs from **z −2.20 to 0.27** while its facing goes from **3.14 to 0.00 radians**, over 391 frames at 30 Hz. A synthetic `⌥⌘W` key event was deliberately never posted: it would have been delivered to whatever app the user had focused, where that combination closes other tabs in Safari and Chrome. Physical key delivery is therefore the one link left for David to confirm by pressing the key. Evidence: `mac/build/whistle-proof/verification.json`.
 
 A 60-second real-time offscreen render of the broader aliveness system at 720×480 with 4× MSAA measured **2.55% CPU**, averaging **27.2 fps** on the current M2 Max. The expression-specific 30 Hz measurement above excludes 4× MSAA. Both are offscreen rendering measurements, not long-duration live-window soaks or battery-life guarantees. The old static scene's 0.0% CPU result is not an animation-performance claim.
 
