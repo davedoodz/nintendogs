@@ -1,0 +1,180 @@
+{
+  "video_url": "https://www.youtube.com/watch?v=hb5j2v10eYs",
+  "inspection_stream": {
+    "width": 1920,
+    "height": 1080,
+    "fps": "60000/1001",
+    "duration_seconds": 970.2693,
+    "codec": "av1",
+    "audio_analyzed": false
+  },
+  "overview": {
+    "frames": 485,
+    "interval_seconds": 2,
+    "first_approx_seconds": 1,
+    "last_approx_seconds": 969
+  },
+  "source_dae_sha256": "3a5be1cf41caa3aa125ba923bf45df54783c4b16432e631ebc95ad9b3dd90c39",
+  "sheets": [
+    {
+      "file": "sit_407.jpg",
+      "start_seconds": 407,
+      "duration_seconds": 4,
+      "samples_per_second": 6,
+      "sample_count": 24,
+      "pane": "right",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "2bb4404bc9aa01df94982018e2a8a941755cb92dc92b92c9a12ea12ec0786491"
+    },
+    {
+      "file": "down_414.jpg",
+      "start_seconds": 414,
+      "duration_seconds": 6,
+      "samples_per_second": 4,
+      "sample_count": 24,
+      "pane": "right",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "7516d85927093b36dbb9bb0fed6ef15c478e419e24060a452910a0405f303c17"
+    },
+    {
+      "file": "roll_197.jpg",
+      "start_seconds": 197,
+      "duration_seconds": 6,
+      "samples_per_second": 4,
+      "sample_count": 24,
+      "pane": "right",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "29c029de58d80f4ed500080b46f8464de4794eadcd0b4a23a69dd8c221e06bf7"
+    },
+    {
+      "file": "belly_219.jpg",
+      "start_seconds": 219,
+      "duration_seconds": 6,
+      "samples_per_second": 4,
+      "sample_count": 24,
+      "pane": "right",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "e2aa1cb88639084c235480340a0599da5329d58b5b3f66048d7e19bd51839d89"
+    },
+    {
+      "file": "alert_264.jpg",
+      "start_seconds": 264,
+      "duration_seconds": 3,
+      "samples_per_second": 8,
+      "sample_count": 24,
+      "pane": "left",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "840e6e46acbc155964a41f807c39794d558fee230f02331ea6d481a8919347a1"
+    },
+    {
+      "file": "gait_814.jpg",
+      "start_seconds": 814,
+      "duration_seconds": 2,
+      "samples_per_second": 12,
+      "sample_count": 24,
+      "pane": "right",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "56544fdfff72314e06949928fc401013fa1de83a7d9396b92d3e809a847f0e02"
+    },
+    {
+      "file": "gift_844.jpg",
+      "start_seconds": 844,
+      "duration_seconds": 4,
+      "samples_per_second": 6,
+      "sample_count": 24,
+      "pane": "right",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "ec689e1dadee03f8df585967a05a172b215bf3719b4d66abb9611c21011341e9"
+    },
+    {
+      "file": "sniff_902.jpg",
+      "start_seconds": 902,
+      "duration_seconds": 6,
+      "samples_per_second": 4,
+      "sample_count": 24,
+      "pane": "right",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "5d8e64ff5a3d1d222086a2469c5aa25bfd31017e76ee9840a4343ec4a1e6943f"
+    },
+    {
+      "file": "drink_628.jpg",
+      "start_seconds": 628,
+      "duration_seconds": 4,
+      "samples_per_second": 6,
+      "sample_count": 24,
+      "pane": "right",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "5518361e5f7a95e286f6522594c8a5d0ae5b4194e237bc98974fadbf363fcf4d"
+    },
+    {
+      "file": "eat_658.jpg",
+      "start_seconds": 658,
+      "duration_seconds": 4,
+      "samples_per_second": 6,
+      "sample_count": 24,
+      "pane": "right",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "e1e417d89adedfedcffb6dc6793abb94827fbf90656bdd0bc5c2dee276ed8212"
+    },
+    {
+      "file": "stride_819.jpg",
+      "start_seconds": 819,
+      "duration_seconds": 2,
+      "samples_per_second": 12,
+      "sample_count": 24,
+      "pane": "right",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "a2fd3a550a3279f3e6106385003a1519e2ea765ed5b3c56a96a644c052d4d40f"
+    },
+    {
+      "file": "approach_184.jpg",
+      "start_seconds": 184,
+      "duration_seconds": 4,
+      "samples_per_second": 6,
+      "sample_count": 24,
+      "pane": "right",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "f2230c848e6b32717a3a5be07478cd6cc13e0a9f84257ee20ae24a85cd0cb4c5"
+    },
+    {
+      "file": "release_223.jpg",
+      "start_seconds": 223,
+      "duration_seconds": 3,
+      "samples_per_second": 8,
+      "sample_count": 24,
+      "pane": "left",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "be4dac506a9b1eeff4f8e6977e91ca41be9b6f077d5e72ea5daffe7c12a87bf2"
+    },
+    {
+      "file": "squat_exit_908.jpg",
+      "start_seconds": 908,
+      "duration_seconds": 4,
+      "samples_per_second": 6,
+      "sample_count": 24,
+      "pane": "right",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "ef4fb6a7830b3ab8571c1672554ed7363369a4cfbf8bdecea2b76515191ba55c"
+    },
+    {
+      "file": "gesture_sit_460.jpg",
+      "start_seconds": 460,
+      "duration_seconds": 3,
+      "samples_per_second": 8,
+      "sample_count": 24,
+      "pane": "right",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "398fc0373b3143d95a5ec2a15d4db67abc88b52de44921e1bb8528d3599c773b"
+    },
+    {
+      "file": "bubble_play_603.jpg",
+      "start_seconds": 603,
+      "duration_seconds": 6,
+      "samples_per_second": 4,
+      "sample_count": 24,
+      "pane": "right",
+      "timestamp_note": "Approximate sample centers; not exact original key times.",
+      "sha256": "328c9a08d03f902df7c0ac17db362c82e0adf734f3313bd14717332308220b86"
+    }
+  ]
+}
