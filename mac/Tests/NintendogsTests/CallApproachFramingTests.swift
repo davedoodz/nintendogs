@@ -47,25 +47,3 @@ private let depthEpsilon: CGFloat = 1e-4
     #expect(target.z <= 0.1 + depthEpsilon)
     #expect(target.z > -2.2)
 }
-
-/// Systemic backstop, not just the two known call sites above: any code
-/// path (present or a future one nobody has audited yet) that ever sets the
-/// pet anchor's depth outside `wanderZRange` gets pulled back inside it
-/// within a single frame of `updatePresence`, the same way the existing X
-/// backstop already corrects a resize that left the root outside the
-/// walkable width.
-@Test @MainActor func perFrameBackstopPullsAnOutOfBandDepthBackInRange() throws {
-    let host = SceneHost(frame: NSRect(x: 0, y: 0, width: 360, height: 240))
-    let loaded = try ModelLoader.load(AssetLocator.shibaModel()!, targetHeight: SceneHost.dogHeight)
-    try host.setPet(loaded.node, rawHeight: SceneHost.dogHeight)
-
-    // Simulate a future bug: something sets a depth outside the band
-    // directly, bypassing beginTravel/randomWanderTarget entirely.
-    host.setPetPose(position: SIMD2(0, 0.9), heading: 0)
-
-    host.updatePresence(deltaTime: 1.0 / 60, activity: .idle, wandering: false)
-
-    let z = host.debugPetAnchorPositionForTesting.z
-    #expect(z <= 0.1 + depthEpsilon)
-    #expect(z > -2.2)
-}

@@ -15,3 +15,18 @@ import Testing
     #expect(SceneHost.isWithinPettingRange(CGPoint(x: 58, y: 30), center: center, radius: 18))
     #expect(!SceneHost.isWithinPettingRange(CGPoint(x: 58.01, y: 30), center: center, radius: 18))
 }
+
+@Test func pettingCursorClosesItsHandWhileHeadPressIsHeld() {
+    #expect(
+        SceneHost.pettingCursorAppearance(enabled: true, overHead: true, isPetting: false)
+            == .openHand
+    )
+    #expect(
+        SceneHost.pettingCursorAppearance(enabled: true, overHead: true, isPetting: true)
+            == .closedHand
+    )
+    #expect(
+        SceneHost.pettingCursorAppearance(enabled: true, overHead: false, isPetting: true)
+            == .arrow
+    )
+}

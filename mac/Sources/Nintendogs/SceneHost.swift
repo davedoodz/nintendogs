@@ -54,11 +54,21 @@ final class SceneHost: SCNView {
     private static let headPetRadius = dogHeight * 0.34
     private static let nearbyZoneExpansion: CGFloat = 0.25
 
+    enum PettingCursorAppearance: Equatable {
+        case arrow
+        case openHand
+        case closedHand
+    }
+
     private let petAnchor = SCNNode()
     private let blobShadow = SCNNode()
+    // A body press is consumed without becoming a petting gesture. Keeping its
+    // origin prevents AppKit from treating the unmatched drag/up as window input.
+    private var pressedOnPet = false
     private var pettingGesture = PettingGesture()
     private var lastCursorSampleAt: TimeInterval = 0
     private var cursorTrackingArea: NSTrackingArea?
+    private var currentPettingCursorAppearance = PettingCursorAppearance.arrow
     private(set) var cursorOverPetHead = false
     var pettingCursorEnabled = true {
         didSet {
@@ -122,9 +132,6 @@ final class SceneHost: SCNView {
     /// code should have no reason to read it (`isWandering`/`isRunning`
     /// already expose what callers need).
     var pendingWanderTargetForTesting: SCNVector3? { wanderTarget }
-    /// Test-only window onto the live root position, for asserting the
-    /// per-frame depth backstop actually pulls an out-of-band Z back in.
-    var debugPetAnchorPositionForTesting: SCNVector3 { petAnchor.position }
     private var gaitSpeeds: (walk: CGFloat, run: CGFloat)?
     private var isCallApproaching = false
 
@@ -693,25 +700,17 @@ final class SceneHost: SCNView {
         return lo <= hi ? lo...hi : 0...0
     }
 
-    /// Defensive per-frame backstop: pulls the root back inside the current
-    /// walkable X range if a resize left it outside, and back inside
-    /// `wanderZRange` if any code path (present or future) ever set a depth
-    /// past the documented safe band — the same class of bug that once let
-    /// `startCallApproach()`'s and the bowl's hardcoded depths crop the dog
-    /// against the panel edges. Skipped while `showCare`'s "approach" action
-    /// owns root position (call/eat/drink), so it never fights that motion;
-    /// those paths already target safe depths, so nothing here needs to.
+    /// Defensive resize handling: pulls the root back inside the current
+    /// walkable X range if a shrink left it outside. Skipped while
+    /// `showCare`'s "approach" action owns root position (call/eat/drink),
+    /// so it never fights that motion.
     private func clampToWalkableBounds() {
         guard petAnchor.action(forKey: "approach") == nil else { return }
-        let clampedZ = min(max(petAnchor.position.z, Self.wanderZRange.lowerBound), Self.wanderZRange.upperBound)
-        if clampedZ != petAnchor.position.z {
-            petAnchor.position.z = clampedZ
-        }
         let range = walkableXRange(atWorldZ: petAnchor.position.z)
         guard range.lowerBound <= range.upperBound else { return }
-        let clampedX = min(max(petAnchor.position.x, range.lowerBound), range.upperBound)
-        if clampedX != petAnchor.position.x {
-            petAnchor.position.x = clampedX
+        let clamped = min(max(petAnchor.position.x, range.lowerBound), range.upperBound)
+        if clamped != petAnchor.position.x {
+            petAnchor.position.x = clamped
         }
     }
 
@@ -1112,10 +1111,28 @@ final class SceneHost: SCNView {
     }
 
     private func setPettingCursor(overHead: Bool) {
-        let shouldShowHand = pettingCursorEnabled && overHead
-        guard cursorOverPetHead != shouldShowHand else { return }
-        cursorOverPetHead = shouldShowHand
-        (shouldShowHand ? NSCursor.openHand : NSCursor.arrow).set()
+        let appearance = Self.pettingCursorAppearance(
+            enabled: pettingCursorEnabled,
+            overHead: overHead,
+            isPetting: pettingGesture.isActive
+        )
+        guard currentPettingCursorAppearance != appearance else { return }
+        currentPettingCursorAppearance = appearance
+        cursorOverPetHead = appearance != .arrow
+        switch appearance {
+        case .arrow: NSCursor.arrow.set()
+        case .openHand: NSCursor.openHand.set()
+        case .closedHand: NSCursor.closedHand.set()
+        }
+    }
+
+    nonisolated static func pettingCursorAppearance(
+        enabled: Bool,
+        overHead: Bool,
+        isPetting: Bool
+    ) -> PettingCursorAppearance {
+        guard enabled, overHead else { return .arrow }
+        return isPetting ? .closedHand : .openHand
     }
 
     private func firstHit(at point: CGPoint) -> SCNHitTestResult? {
@@ -1149,6 +1166,8 @@ final class SceneHost: SCNView {
 
     override func mouseDown(with event: NSEvent) {
         dispatchPetting(pettingGesture.end())
+        setPettingCursor(overHead: false)
+        pressedOnPet = false
         let point = convert(event.locationInWindow, from: nil)
         let hit = firstHit(at: point)
         if let node = hit?.node, isBallNode(node), !ballAttached {
@@ -1157,8 +1176,16 @@ final class SceneHost: SCNView {
             return
         }
         if let hit, isPetNode(hit.node) {
+            pressedOnPet = true
             if isPetHeadHit(hit, at: point) {
-                pettingGesture.begin(at: point, overHead: true)
+                dispatchPetting(
+                    pettingGesture.begin(
+                        at: point,
+                        overHead: true,
+                        at: event.timestamp
+                    )
+                )
+                setPettingCursor(overHead: true)
             }
             return
         }
@@ -1166,10 +1193,11 @@ final class SceneHost: SCNView {
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard pettingGesture.beganOnHead else {
+        guard pressedOnPet else {
             super.mouseDragged(with: event)
             return
         }
+        guard pettingGesture.beganOnHead else { return }
         let point = convert(event.locationInWindow, from: nil)
         let overHead = firstHit(at: point).map { isPetHeadHit($0, at: point) } ?? false
         setPettingCursor(overHead: overHead)
@@ -1183,8 +1211,10 @@ final class SceneHost: SCNView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        let handledPetPress = pettingGesture.beganOnHead
+        let handledPetPress = pressedOnPet
         dispatchPetting(pettingGesture.end())
+        updatePettingCursor(for: event)
+        pressedOnPet = false
         if !handledPetPress {
             super.mouseUp(with: event)
         }

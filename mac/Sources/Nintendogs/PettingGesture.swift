@@ -10,31 +10,35 @@ struct PettingGesture {
         case ended
     }
 
-    static let startDistance: CGFloat = 4
     static let strokeDistance: CGFloat = 18
     static let strokeInterval: TimeInterval = 0.18
 
     private(set) var beganOnHead = false
     private(set) var isActive = false
     private var trackingHead = false
-    private var startPoint: CGPoint?
     private var lastPoint: CGPoint?
     private var accumulatedDistance: CGFloat = 0
     private var lastStrokeTime: TimeInterval = 0
 
-    mutating func begin(at point: CGPoint, overHead: Bool) {
+    mutating func begin(
+        at point: CGPoint,
+        overHead: Bool,
+        at time: TimeInterval
+    ) -> Event? {
         reset()
-        startPoint = point
+        guard overHead else { return nil }
         lastPoint = point
-        beganOnHead = overHead
-        trackingHead = overHead
+        beganOnHead = true
+        trackingHead = true
+        isActive = true
+        lastStrokeTime = time
+        return .began
     }
 
     mutating func drag(to point: CGPoint, overHead: Bool, at time: TimeInterval) -> Event? {
-        guard let startPoint else { return nil }
+        guard isActive else { return nil }
         let segment = lastPoint.map { hypot(point.x - $0.x, point.y - $0.y) } ?? 0
         lastPoint = point
-        let total = hypot(point.x - startPoint.x, point.y - startPoint.y)
         if !trackingHead {
             guard beganOnHead, overHead else { return nil }
             trackingHead = true
@@ -46,12 +50,6 @@ struct PettingGesture {
             return nil
         }
         accumulatedDistance += segment
-        if !isActive, total >= Self.startDistance {
-            isActive = true
-            accumulatedDistance = 0
-            lastStrokeTime = time
-            return .began
-        }
         if isActive,
            accumulatedDistance >= Self.strokeDistance,
            time - lastStrokeTime >= Self.strokeInterval {
@@ -78,7 +76,6 @@ struct PettingGesture {
         beganOnHead = false
         trackingHead = false
         isActive = false
-        startPoint = nil
         lastPoint = nil
         accumulatedDistance = 0
         lastStrokeTime = 0

@@ -12,7 +12,7 @@ struct StatusMenu: View {
         Text("Hunger: \(Int(delegate.needs.hunger))% · Thirst: \(Int(delegate.needs.thirst))%")
         Text("Energy: \(Int(delegate.needs.energy))% · Fun: \(Int(delegate.needs.fun))%")
         Text("Cleanliness: \(Int(delegate.needs.cleanliness))% · Affection: \(Int(delegate.needs.affection))%")
-        Text("Hover to say hello · Stroke to pet · Double-click to play")
+        Text("Hover to say hello · Stroke the head to pet")
         Text("Whistle from any app: \(GlobalHotKey.whistleDisplayName)")
         Divider()
         Button("Give food") { delegate.interact(.eat) }
