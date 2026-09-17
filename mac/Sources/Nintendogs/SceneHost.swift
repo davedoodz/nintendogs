@@ -13,8 +13,8 @@ private enum CameraLens {
 
 /// Transparent SceneKit view with the DS-style fixed camera (KTD4), warm light and a blob shadow.
 final class SceneHost: SCNView {
-    static let dogHeight: CGFloat = 1.0
-    /// Camera values ported from the web study (`src/scene.js`), rescaled for a 1-unit dog.
+    static let dogHeight: CGFloat = 0.625
+    /// Camera values ported from the web study (`src/scene.js`).
     private static let cameraPosition = SCNVector3(0, 0.78, 2.3)
     private static let cameraLook = SCNVector3(0, 0.48, 0)
 
@@ -38,7 +38,7 @@ final class SceneHost: SCNView {
     /// Phase 2: "run_loop when ... the target is > 60% of panel width away").
     private static let runDistanceFraction: CGFloat = 0.6
     /// Distance at which a wander leg counts as arrived (~3% of dog height).
-    private static let arrivalDistance: CGFloat = 0.03
+    private static let arrivalDistance = dogHeight * 0.03
     /// Facing/gaze easing time constants (`docs/ALIVENESS_PLAN.md` Phase 2:
     /// "0.3 s eased" yaw; Phase 3: "spring-eased" gaze).
     private static let facingEaseTau: TimeInterval = 0.3
@@ -228,7 +228,7 @@ final class SceneHost: SCNView {
         sun.eulerAngles = SCNVector3(-0.9, 0.6, 0)
         scene.rootNode.addChildNode(sun)
 
-        blobShadow.geometry = SCNPlane(width: 0.9, height: 0.6)
+        blobShadow.geometry = SCNPlane(width: Self.dogHeight * 0.9, height: Self.dogHeight * 0.6)
         let shadowMaterial = SCNMaterial()
         shadowMaterial.diffuse.contents = Self.blobShadowImage()
         shadowMaterial.lightingModel = .constant
@@ -277,7 +277,7 @@ final class SceneHost: SCNView {
         let (minimum, maximum) = node.boundingBox
         let x = max(abs(minimum.x), abs(maximum.x))
         let z = max(abs(minimum.z), abs(maximum.z))
-        petRadius = hypot(x, z) + 0.06
+        petRadius = hypot(x, z) + Self.dogHeight * 0.06
         headNode = node.childNode(withName: "head", recursively: true)
         mouthNode = node.childNode(withName: "mouth", recursively: true)
         expressionAnimator.configure(
@@ -694,7 +694,7 @@ final class SceneHost: SCNView {
     private func walkableXRange(atWorldZ z: CGFloat) -> ClosedRange<CGFloat> {
         guard bounds.width > 0, bounds.height > 0 else { return 0...0 }
         // Use the upper body's near depth so the footprint includes perspective.
-        let depth = projectPoint(SCNVector3(0, Self.dogHeight, z + 0.15)).z
+        let depth = projectPoint(SCNVector3(0, Self.dogHeight, z + Self.dogHeight * 0.15)).z
         let left = unprojectPoint(SCNVector3(bounds.minX, bounds.midY, depth))
         let right = unprojectPoint(SCNVector3(bounds.maxX, bounds.midY, depth))
         let lo = min(left.x, right.x) + petRadius
