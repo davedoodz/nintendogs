@@ -34,15 +34,17 @@ Walk/run clips have fixed roots. Root movement waits until the actual gait clip 
 
 Speeds are measured from the backward velocity of the planted hind paw in the authored Collada matrices, scaled to the normalized model. Malformed or missing gait data raises a loading error rather than silently substituting guessed speeds.
 
-The imported rig faces **+Z**: head/mouth positions established this in a bundled probe. Initial facing is toward the camera. Turning uses that same convention. Wander targets span depth −2.2…0.1 (the near end is where the front paws still clear the panel's bottom edge; at the far end the dog renders at about half size), so legs toward or away from the camera read as real depth. Bounds account for the model's horizontal radius and camera perspective at the current depth, not just its center. The panel keeps a 3:2 aspect ratio when resized. The shadow follows the pet anchor. A hungry/thirsty dog can wander toward the bowl.
+The imported rig faces **+Z**: head/mouth positions established this in a bundled probe. Initial facing is toward the camera. Turning uses that same convention. Wander targets span depth −2.2…0.1 (the near end is where the front paws still clear the panel's bottom edge; at the far end the dog renders at about half size), so legs toward or away from the camera read as real depth. Bounds account for the model's horizontal radius and camera perspective at the current depth, not just its center. The panel keeps a 3:2 aspect ratio when resized. The shadow follows the pet anchor. A hungry/thirsty dog can wander toward the bowl, which sits at the same `0.1` depth (fixed: it used to sit at `0.55`, well past the safe edge, cropping the dog against the panel while it ate).
+
+**Invariant: nothing places the pet anchor closer to the camera than `wanderZRange`'s `0.1` upper bound.** The whistle call once ran the approach to a hardcoded `z: 0.3`, past that edge, cropping ears/chest/paws against the panel during the `paws_up` finish (the reported bug). `startCallApproach()` now stops at `wanderZRange.upperBound - 0.15`, short of the edge, since `paws_up` is a taller/reaching pose than the standing pose `0.1` was measured against. Any new activity that moves the anchor in Z must clamp against this same bound instead of picking a new depth by eye.
 
 ## Attention and play
 
 - Hover: alert, then a happy response; sustained attention slowly increases affection.
 - Cursor nearby: limited, eased head aim, composited from each frame's authored animation pose. The SceneKit transform constraint is explicitly non-incremental so a held gaze cannot compound into a full head rotation. Head position is preserved, and body-adjacent joints are not distorted.
-- Single-click the dog: call/wake.
-- Stroke across it: pet.
-- Double-click it: play.
+- Click or drag the body: inert. The dog owns its position and movement.
+- Stroke within the animated head target: pet.
+- Call/wake is whistle-only; play remains available from the menu.
 - Cursor leaves after attention: look around.
 
 Cursor location is polled without a global input monitor or Accessibility permission. Gaze is disabled during sleep, eating, drinking, and diagnostic preview. The animation picker remains under **Animation diagnostics**; it is not needed for normal use. **Personality** controls activity level and whether the dog explores the panel.

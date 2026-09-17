@@ -118,6 +118,10 @@ final class SceneHost: SCNView {
     /// justify one; check this after `startWander` to see which was chosen.
     private(set) var isRunning = false
     private var wanderTarget: SCNVector3?
+    /// Test-only window onto the pending wander/approach target; production
+    /// code should have no reason to read it (`isWandering`/`isRunning`
+    /// already expose what callers need).
+    var pendingWanderTargetForTesting: SCNVector3? { wanderTarget }
     private var gaitSpeeds: (walk: CGFloat, run: CGFloat)?
     private var isCallApproaching = false
 
@@ -227,7 +231,11 @@ final class SceneHost: SCNView {
         let rim = SCNTorus(ringRadius: 0.13, pipeRadius: 0.025)
         rim.firstMaterial?.diffuse.contents = NSColor.systemOrange
         bowl.geometry = rim
-        bowl.position = SCNVector3(0, 0.04, 0.55)
+        // z matches wanderZRange's upper bound: startWander(towardBowl:) snaps
+        // the pet anchor exactly onto this position, so anything closer to the
+        // camera than that documented, measured-safe depth would crop the dog
+        // against the panel's bottom/side edges while it eats.
+        bowl.position = SCNVector3(0, 0.04, Self.wanderZRange.upperBound)
         let contents = SCNCylinder(radius: 0.12, height: 0.02)
         bowlContents.geometry = contents
         bowl.addChildNode(bowlContents)
@@ -580,10 +588,21 @@ final class SceneHost: SCNView {
 
     /// Runs toward the near, centered call position even when autonomous
     /// wandering is disabled. The caller owns the run clip.
+    ///
+    /// Stops short of `wanderZRange.upperBound` (the documented, measured
+    /// "front paws clear the panel's bottom edge" bound for a standing pose)
+    /// by the same 0.15 forward-reach margin `walkableXRange` already applies
+    /// elsewhere: the call chain ends in `paws_up_loop`, a taller/reaching
+    /// pose than plain standing, so it needs more headroom than the wander
+    /// edge gives a resting dog. A prior hardcoded `z: 0.3` ignored the
+    /// wander bound entirely and pulled the dog closer to the camera than
+    /// anywhere else in the app ever places it, cropping ears/chest/paws
+    /// against the panel edges.
     func startCallApproach() {
         guard gaitSpeeds != nil else { return }
+        let z = Self.wanderZRange.upperBound - 0.15
         beginTravel(
-            to: SCNVector3(0, petAnchor.position.y, 0.3),
+            to: SCNVector3(0, petAnchor.position.y, z),
             running: true,
             callApproach: true
         )
