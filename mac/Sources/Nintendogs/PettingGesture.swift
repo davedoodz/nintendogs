@@ -50,8 +50,7 @@ struct PettingGesture {
             return nil
         }
         accumulatedDistance += segment
-        if isActive,
-           accumulatedDistance >= Self.strokeDistance,
+        if accumulatedDistance >= Self.strokeDistance,
            time - lastStrokeTime >= Self.strokeInterval {
             accumulatedDistance = 0
             lastStrokeTime = time

@@ -29,4 +29,8 @@ import Testing
         SceneHost.pettingCursorAppearance(enabled: true, overHead: false, isPetting: true)
             == .arrow
     )
+    #expect(
+        SceneHost.pettingCursorAppearance(enabled: false, overHead: true, isPetting: true)
+            == .arrow
+    )
 }

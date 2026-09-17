@@ -69,7 +69,6 @@ final class SceneHost: SCNView {
     private var lastCursorSampleAt: TimeInterval = 0
     private var cursorTrackingArea: NSTrackingArea?
     private var currentPettingCursorAppearance = PettingCursorAppearance.arrow
-    private(set) var cursorOverPetHead = false
     var pettingCursorEnabled = true {
         didSet {
             if !pettingCursorEnabled {
@@ -1129,7 +1128,6 @@ final class SceneHost: SCNView {
         )
         guard currentPettingCursorAppearance != appearance else { return }
         currentPettingCursorAppearance = appearance
-        cursorOverPetHead = appearance != .arrow
         switch appearance {
         case .arrow: NSCursor.arrow.set()
         case .openHand: NSCursor.openHand.set()
