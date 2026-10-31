@@ -1,16 +1,5 @@
 # Nintendogs (fan recreation)
 
-```
-        _......._
-      .'  o   o   `.
-     /    .--.      \
-    |    ( __ )      |      woof?
-     \    `--'      /
-      `.___⌣_____.'
-       /  |   |  \
-      (___)   (___)
-```
-
 A fan-made, from-scratch recreation of the Nintendo DS Nintendogs (2005) feel: a 3D puppy you pet, wash, walk, and name, with the DS-era soft-lit look.
 
 No original Nintendo assets or code are used anywhere in this repo. Everything is built new, from scratch, as visual reference only.
